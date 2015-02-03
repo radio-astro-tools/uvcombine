@@ -1,4 +1,5 @@
 Ground and space based bolometer array instruments
+
 information to collect: observing freq, bandpass curve, simultaneous FOV (largest recovered scale)
 
 [test link](http://git-scm.com/book/en/v2/Git-on-the-Server-Generating-Your-SSH-Public-Key)
@@ -17,18 +18,18 @@ IRAM
 
 
 JCMT
-SCUBA: SCUPOL, and legacy paper
-SCUBA2: sample data from some legacy survey?
+* SCUBA: SCUPOL, and legacy paper
+* SCUBA2: sample data from some legacy survey?
 
 APEX
-LABOCA = ATLASGAL?
-SABOCA: in archive
-ARTEMIS: in archive; Thomas?
+* LABOCA = ATLASGAL?
+* SABOCA: in archive
+* ARTEMIS: in archive; Thomas?
 
 
 
 Herschel
-PACS/SPIRES: instrument documentation, HiGAL paper
+* PACS/SPIRES: instrument documentation, HiGAL paper
 
 Planck
-HFI: some paper or documentation? 
+* HFI: some paper or documentation? 
