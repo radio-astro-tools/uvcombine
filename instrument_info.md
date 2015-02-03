@@ -1,8 +1,13 @@
 Ground and space based bolometer array instruments
 
+**(work in progress)**
 information to collect: observing freq, bandpass curve, simultaneous FOV (largest recovered scale)
 
 [test link](http://git-scm.com/book/en/v2/Git-on-the-Server-Generating-Your-SSH-Public-Key)
+
+[Markdown syntax](https://guides.github.com/features/mastering-markdown/)
+
+[More Markdown examples](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet#lines)
 
 
 CSO
@@ -22,14 +27,13 @@ JCMT
 * SCUBA2: sample data from some legacy survey?
 
 APEX
-* LABOCA = ATLASGAL?
+* LABOCA = see ATLASGAL
 * SABOCA: in archive
 * ARTEMIS: in archive; Thomas?
 
 
-
 Herschel
-* PACS/SPIRES: instrument documentation, HiGAL paper
+* PACS/SPIRE: instrument documentation, HiGAL pipeline paper
 
 Planck
 * HFI: some paper or documentation? 
