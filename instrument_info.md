@@ -1,6 +1,8 @@
 Ground and space based bolometer array instruments
 information to collect: observing freq, bandpass curve, simultaneous FOV (largest recovered scale)
 
+[test link](http://git-scm.com/book/en/v2/Git-on-the-Server-Generating-Your-SSH-Public-Key)
+
 CSO
 Bolocam: see BGPS
 SHARC: some sort of archive, or instrument documentation?
