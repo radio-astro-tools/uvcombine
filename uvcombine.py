@@ -1,50 +1,43 @@
-import os
-import image_registration
-from image_registration.fft_tools.zoom import zoom_on_pixel
-from FITS_tools.cube_regrid import regrid_fits_cube,regrid_cube_hdu
-from FITS_tools.hcongrid import hcongrid,hcongrid_hdu
+import image_tools
+from FITS_tools.hcongrid import hcongrid_hdu
 import FITS_tools
-import fft_psd_tools
-import spectral_cube.io.fits
-from astropy import wcs
+from spectral_cube import SpectralCube
 from astropy.io import fits
-from astropy import coordinates
 from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
-from itertools import izip
 import numpy as np
 
 def file_in(filename, extnum=0):
-   """
-   Take the input files. If input is already HDU, then return it.
-   If input is a .fits filename, then read the .fits file.
-
-   Return
-   ----------
-   hdu :  obj
-      An object containing both the image and the header
-   im  :  (float point?) array
-      The image array
-   header : header object
-      The header of the input .fits file
-
-   Parameters
-   ----------
-   filename : str
-        The input .fits filename or a HDU variable name
-   extnum   : int
-        The extension number to use from the input .fits file
-   """
-   if isinstance(filename, (fits.ImageHDU, fits.PrimaryHDU) ):
-      hdu = filename
-   else:
-      hdu = fits.open(filename)[extnum]
-
-   im     = hdu.data.squeeze()
-   header = FITS_tools.strip_headers.flatten_header(hdu.header)
-
-   return hdu, im, header
+    """
+    Take the input files. If input is already HDU, then return it.
+    If input is a .fits filename, then read the .fits file.
+   
+    Return
+    ----------
+    hdu :  obj
+       An object containing both the image and the header
+    im  :  (float point?) array
+       The image array
+    header : header object
+       The header of the input .fits file
+   
+    Parameters
+    ----------
+    filename : str
+         The input .fits filename or a HDU variable name
+    extnum   : int
+         The extension number to use from the input .fits file
+    """
+    if isinstance(filename, (fits.ImageHDU, fits.PrimaryHDU)):
+        hdu = filename
+    else:
+        hdu = fits.open(filename)[extnum]
+   
+    im = hdu.data.squeeze()
+    header = FITS_tools.strip_headers.flatten_header(hdu.header)
+   
+    return hdu, im, header
 
 
 
@@ -60,6 +53,7 @@ def flux_unit(image, header):
     header : header object
        Header of the input/output image
     """
+    raise NotImplementedError
 
     return image, header
 
@@ -333,9 +327,9 @@ def freq_filling(im1, im2, hd1, hd2, hd3):
     hd3      : header object
        Header for extracting the targeted frequency for interpolation
     """
-    interpol        = im1
+    interpol = im1
     interpol_header = hd1
-    interpol_hdu    = fits.PrimaryHDU(data=np.abs(im1), header=hd1)
+    interpol_hdu = fits.PrimaryHDU(data=np.abs(im1), header=hd1)
 
     return interpol, interpol_header, interpol_hdu
 
@@ -421,7 +415,7 @@ def AKB_combine(hires, lores,
                 highresscalefactor=1.0,
                 lowresscalefactor=1.0,
                 lowresfwhm=1*u.arcmin,
-                targres = -1.0,
+                targres=-1.0,
                 return_hdu=False,
                 return_regridded_lores=False, output_fits=True):
     """
@@ -451,14 +445,14 @@ def AKB_combine(hires, lores,
     """
 
     #* Input data
-    hdu1, im1,    hd1    = file_in(hires, highresextnum)
-    hdu2, im2raw, hd2    = file_in(lores, lowresextnum)
+    hdu1, im1,    hd1 = file_in(hires, highresextnum)
+    hdu2, im2raw, hd2 = file_in(lores, lowresextnum)
 
     # load default parameters (primary beam, the simultaneous FOV of the ground
     #                          based observations)
     # Ke Wang part. Need to think about which is the best way of doing this.
-      # Here better to get the resolution information into the header (bmaj, bmin),
-      # if it isn't there.
+    # Here better to get the resolution information into the header (bmaj, bmin),
+    # if it isn't there.
 
     #* Match flux unit (convert all possible units to un-ambiguous unit like Jy/pixel or Jy/arcsec^2)
     im1,    hd1 = flux_unit(im1, hd1)
@@ -494,7 +488,7 @@ def AKB_combine(hires, lores,
     #* Final Smoothing
     # [should be an optional step]
     if (targres > 0.0):
-       combo = smoothing(combo, targres)
+        combo = smoothing(combo, targres)
 
     #* generate amplitude plot and PDF output
     akb_plot(fft1, fft2, fftsum)
@@ -564,19 +558,11 @@ def feather_simple(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    if isinstance(hires, (fits.ImageHDU, fits.PrimaryHDU)):
-        hdu_hi = hires
-    else:
-        hdu_hi = fits.open(hires)[highresextnum]
-    if isinstance(lores, (fits.ImageHDU, fits.PrimaryHDU)):
-        hdu_low = lores
-    else:
-        hdu_low = fits.open(lores)[lowresextnum]
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
 
-    im_hi = hdu_hi.data.squeeze()
-    im_lowraw = hdu_low.data.squeeze()
-
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hdu_hi, im_hi, im_lowraw, hdu_low)
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
+                                                   im_lowraw, header_low)
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
@@ -591,3 +577,147 @@ def feather_simple(hires, lores,
         return combo, hdu_low
     else:
         return combo
+
+def feather_plot(hires, lores,
+                 highresextnum=0,
+                 lowresextnum=0,
+                 highresscalefactor=1.0,
+                 lowresscalefactor=1.0, lowresfwhm=1*u.arcmin
+                ):
+    """
+    Plot the power spectra of two images that would be combined
+    along with their weights.
+
+    Parameters
+    ----------
+    highresfitsfile : str
+        The high-resolution FITS file
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    highresextnum : int
+        The extension number to use from the high-res FITS file
+    highresscalefactor : float
+    lowresscalefactor : float
+        A factor to multiply the high- or low-resolution data by to match the
+        low- or high-resolution data
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+
+    Returns
+    -------
+    combo : image
+        The image of the combined low and high resolution data sets
+    combo_hdu : fits.PrimaryHDU
+        (optional) the image encased in a FITS HDU with the relevant header
+    """
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
+                                                   im_lowraw, header_low)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    kfft = np.fft.fftshift(kfft)
+    ikfft = np.fft.fftshift(ikfft)
+
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+
+    rad,azavg_kernel = image_tools.radialprofile.azimuthalAverage(np.abs(kfft), returnradii=True)
+    rad,azavg_ikernel = image_tools.radialprofile.azimuthalAverage(np.abs(ikfft), returnradii=True)
+    rad,azavg_hi = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi), returnradii=True)
+    rad,azavg_lo = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo), returnradii=True)
+    rad,azavg_hi_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi*ikfft), returnradii=True)
+    rad,azavg_lo_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo*kfft), returnradii=True)
+
+    rad_as = (pixscale*3600) / rad
+
+    import pylab as pl
+
+    pl.clf()
+    ax1 = pl.subplot(3,1,1)
+    ax1.loglog(rad_as, azavg_kernel, color='b', linewidth=2, alpha=0.8,
+               label="Low-res Kernel")
+    ax1.loglog(rad_as, azavg_ikernel, color='r', linewidth=2, alpha=0.8,
+               label="High-res Kernel")
+
+    ax2 = pl.subplot(3,1,2)
+    ax2.loglog(rad_as, azavg_lo, color='b', linewidth=2, alpha=0.8,
+               label="Low-res image")
+    ax2.loglog(rad_as, azavg_hi, color='r', linewidth=2, alpha=0.8,
+               label="High-res image")
+
+    ax3 = pl.subplot(3,1,3)
+    ax3.loglog(rad_as, azavg_lo_scaled, color='b', linewidth=2, alpha=0.8,
+               label="Low-res scaled image")
+    ax3.loglog(rad_as, azavg_hi_scaled, color='r', linewidth=2, alpha=0.8,
+               label="High-res scaled image")
+    ax3.set_xlabel("Size Scale (arcsec)")
+
+def spectral_regrid(cube, outgrid):
+    """
+    Spectrally regrid a cube onto a new spectral output grid
+
+    (this is redundant with regrid_cube_hdu, but will work independently if you
+    already have spatially matched frames)
+
+    Parameters
+    ----------
+    cube : SpectralCube
+        A SpectralCube object to regrid
+    outgrid : array
+        An array of the spectral positions to regrid onto
+
+    Returns
+    -------
+    cube : fits.PrimaryHDU
+        An HDU containing the output cube in FITS HDU form
+    """
+
+    assert isinstance(cube, SpectralCube)
+
+    inaxis = cube.spectral_axis.to(outgrid.unit)
+
+    indiff = np.mean(np.diff(inaxis))
+    outdiff = np.mean(np.diff(outgrid))
+    if outdiff < 0:
+        outgrid=outgrid[::-1]
+        outdiff = np.mean(np.diff(outgrid))
+    if indiff < 0:
+        cubedata = cube.filled_data[::-1]
+        inaxis = cube.spectral_axis.to(outgrid.unit)[::-1]
+        indiff = np.mean(np.diff(inaxis))
+    else:
+        cubedata = cube.filled_data[:]
+    if indiff < 0 or outdiff < 0:
+        raise ValueError("impossible.")
+
+    assert np.all(np.diff(outgrid) > 0)
+    assert np.all(np.diff(inaxis) > 0)
+
+    np.testing.assert_allclose(np.diff(outgrid), outdiff,
+                               err_msg="Output grid must be linear")
+
+    if outdiff > 2 * indiff:
+        raise ValueError("Input grid has too small a spacing.  It needs to be "
+                         "smoothed prior to resampling.")
+
+    newcube = np.empty([outgrid.size, cube.shape[1], cube.shape[2]])
+
+    yy,xx = np.indices(cube.shape[1:])
+
+    pb = ProgressBar(xx.size)
+    for ix, iy in (zip(xx.flat, yy.flat)):
+        newcube[:,iy,ix] = np.interp(outgrid.value, inaxis.value,
+                                     cubedata[:,iy,ix].value)
+        pb.update()
+
+    newheader = cube.header
+    newheader['CRPIX3'] = 1
+    newheader['CRVAL3'] = outgrid[0].value
+    newheader['CDELT3'] = outdiff.value
+    newheader['CUNIT3'] = outgrid.unit.to_string('FITS')
+
+    return fits.PrimaryHDU(data=newcube, header=newheader)
