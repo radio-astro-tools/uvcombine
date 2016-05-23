@@ -18,11 +18,11 @@ import numpy as np
 def file_in(filename, extnum=0):
    """
    Take the input files. If input is already HDU, then return it.
-   If input is a .fits filename, then read the .fits file. 
+   If input is a .fits filename, then read the .fits file.
 
    Return
    ----------
-   hdu :  obj 
+   hdu :  obj
       An object containing both the image and the header
    im  :  (float point?) array
       The image array
@@ -40,7 +40,7 @@ def file_in(filename, extnum=0):
       hdu = filename
    else:
       hdu = fits.open(filename)[extnum]
-   
+
    im     = hdu.data.squeeze()
    header = FITS_tools.strip_headers.flatten_header(hdu.header)
 
@@ -55,9 +55,9 @@ def flux_unit(image, header):
     Parameter/Return
     ----------------
     image : (float point?) array
-       The input image with arbitrary flux unit (e.g. Jy/beam). 
+       The input image with arbitrary flux unit (e.g. Jy/beam).
        Get converted to Jy/arcsec^2 units in output.
-    header : header object    
+    header : header object
        Header of the input/output image
     """
 
@@ -65,13 +65,24 @@ def flux_unit(image, header):
 
 
 
-def regrid(hd1,im1,im2raw,hd2):
+def regrid(hd1, im1, im2raw, hd2):
     """
     Regrid the low resolution image to have the same dimension and pixel size with the
     high resolution image.
 
-    Return
+    Parameters
     ----------
+    hd1 : header object
+       The header of the high resolution image
+    im1 : (float point?) array
+       The high resolution image
+    im2raw : (float point?) array
+       The pre-regridded low resolution image
+    hd2 : header object
+       header of the low resolution image
+
+    Returns
+    -------
     hdu2 : An object containing both the image and the header
        This will containt the regridded low resolution image, and the image header taken
        from the high resolution observation.
@@ -82,16 +93,6 @@ def regrid(hd1,im1,im2raw,hd2):
     pixscale : float (?)
        pixel size in the input high resolution image.
 
-    Parameters
-    ----------
-    hd1 : header object
-       The header of the high resolution image
-    im1 : (float point?) array
-       The high resolution image
-    im2raw : (float point?) array
-       The pre-regridded low resolution image
-    hd2 : header object    
-       header of the low resolution image
     """
 
     # Sanity Checks:
@@ -121,20 +122,21 @@ def regrid(hd1,im1,im2raw,hd2):
 
 def pbcorr(fft2, hd1, hd2):
     """
-    Divide the fourier transformed low resolution image with its fourier transformed primary
-    beam, and then times the fourier transformed primary beam of the high resolution image.
+    Divide the fourier transformed low resolution image with its fourier
+    transformed primary beam, and then times the fourier transformed primary
+    beam of the high resolution image.
 
     Parameters
     ----------
-    fft2 : float array 
+    fft2 : float array
        Fourier transformed low resolution image
     hd1 : header object
        Header of the high resolution image
     hd2 : header object
-       Header of the low resolution image  
- 
-    Return
-    ---------- 
+       Header of the low resolution image
+
+    Returns
+    -------
     fft2 : float array
        Fourier transformed low resolution image, after corrected for the primary beam effect
     """
@@ -147,20 +149,20 @@ def flux_match(fft1, fft2):
     """
     Scale the flux level of the high resolution image, based on the flux level of the low
     resolution image. This is because we probably trust the flux scale from the space better,
-    given that is it not affected by the atmospheric effects and the related calibrations. 
-    This also maintain a consistency if we want to incorporate more bands from the space 
+    given that is it not affected by the atmospheric effects and the related calibrations.
+    This also maintain a consistency if we want to incorporate more bands from the space
     observatory for science analysis.
 
     Parameters
     ----------
-    fft1 : float array 
+    fft1 : float array
        Fourier transformed high resolution image
-    fft2 : float array 
+    fft2 : float array
        Fourier transformed low resolution image
 
     Return
     -----------
-    fft1 : float array 
+    fft1 : float array
        Fourier transformed low resolution image after flux rescaling.
     """
 
@@ -170,45 +172,55 @@ def flux_match(fft1, fft2):
 
 def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     """
-    Construct the weight kernels (image arrays) for the fourier transformed low resolution and
-    high resolution images. This routine follow the "feather algorithm", e.g.:
-  
-    (***To be detailed.)  
-  
-    Return
-    ----------
-    kernel  : float array
-       An image array containing the weighting for the low resolution image
-    kernel1 : float array
-       An image array containing the weighting for the high resolution image
+    Construct the weight kernels (image arrays) for the fourier transformed low
+    resolution and high resolution images.  The kernels are the fourier transforms
+    of the low-resolution beam and (1-[that kernel])
 
     Parameters
     ----------
     nax2, nax1 : int
-       Number of pixels in each axes. 
+       Number of pixels in each axes.
     lowresfwhm : float
-       Angular resolution of the low resolution image (FWHM)  
+       Angular resolution of the low resolution image (FWHM)
     pixscale : float (?)
        pixel size in the input high resolution image.
+
+    Return
+    ----------
+    kfft : float array
+       An image array containing the weighting for the low resolution image
+    ikfft : float array
+       An image array containing the weighting for the high resolution image
+       (simply 1-kfft)
     """
     # Construct arrays which hold the x and y coordinates (in unit of pixels)
     # of the image
-    ygrid,xgrid = (np.indices([nax2,nax1])-np.array([(nax2-1.)/2,(nax1-1.)/2.])[:,None,None])
+    ygrid,xgrid = (np.indices([nax2,nax1]) -
+                   np.array([(nax2-1.)/2,(nax1-1.)/2.])[:,None,None])
 
+    # constant converting "resolution" in fwhm to sigma
     fwhm = np.sqrt(8*np.log(2))
+
     # sigma in pixels
     sigma = ((lowresfwhm/fwhm/(pixscale*u.deg)).decompose().value)
-    log.debug('sigma = {0}'.format(sigma))
+    # not used, just noted that these are the theoretical values (...maybe...)
+    #sigma_fftspace = (1/(4*np.pi**2*sigma**2))**0.5
+    #sigma_fftspace = (2*np.pi*sigma)**-1
+    #log.debug('sigma = {0}, sigma_fftspace={1}'.format(sigma, sigma_fftspace))
 
-    kernel = np.fft.fftshift( np.exp(-(xgrid**2+ygrid**2)/(2*sigma**2)) )
-    kernel/=kernel.max()
-    kernel1 = 1 - kernel
+    kernel = np.fft.fftshift(np.exp(-(xgrid**2+ygrid**2)/(2*sigma**2)))
+    # convert the kernel, which is just a gaussian in image space,
+    # to its corresponding kernel in fourier space
+    kfft = np.abs(np.fft.fft2(kernel)) # should be mostly real
+    # normalize the kernel
+    kfft/=kfft.max()
+    ikfft = 1-kfft
 
-    return kernel,kernel1
+    return kfft, ikfft
 
 
 
-def fftmerge(kernel1,kernel2,fft1,fft2):
+def fftmerge(kfft,ikfft,im_hi,im_lo):
     """
     Combine images in the fourier domain, and then output the combined image
     both in fourier domain and the image domain.
@@ -217,22 +229,23 @@ def fftmerge(kernel1,kernel2,fft1,fft2):
     ----------
     kernel1,2 : float array
        Weighting images.
-    fft1,fft2: float array
-       Fourier transformed input images.
+    im1,im2: float array
+       Input images.
 
-    Return
-    ----------
+    Returns
+    -------
     fftsum : float array
        Combined image in fourier domain.
     combo  : float array
        Combined image in image domain.
     """
 
-    # Sanity check in case that the two input images does not overlap well
-    # in the uv-distance range.
+    fft_hi = np.fft.fft2(np.nan_to_num(im_hi))
+    fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
     # Combine and inverse fourier transform the images
-    fftsum = kernel2*fft2 + kernel1*fft1
+    fftsum = kfft*fft_lo + ikfft*fft_hi
+
     combo = np.fft.ifft2(fftsum)
 
     return fftsum, combo
@@ -297,7 +310,7 @@ def outfits(image, header, outname="output.fits"):
     ----------
     image : (float point?) array
        The combined image
-    header : header object    
+    header : header object
        Header of the combined image
     outname : str
        Filename of the .fits output of the combined image
@@ -334,15 +347,15 @@ def AKB_interpol(lores1, lores2, hires,
                  extnum1=0,
                  extnum2=0,
                  hiresextnum=0,
-                 scalefactor1=1.0, 
-                 scalefactor2=1.0, 
+                 scalefactor1=1.0,
+                 scalefactor2=1.0,
                  output_fits=True,
                  outfitsname='interpolate.fits'):
     """
     This procedure is provided for the case that we need to interpolate
-    two space observatory image, to make the image at the observing 
+    two space observatory image, to make the image at the observing
     frequency of the ground based one.
- 
+
     Parameter
     ---------
     lores1, lores2 : str
@@ -379,19 +392,19 @@ def AKB_interpol(lores1, lores2, hires,
     im2, hd2 = flux_unit(im2, hd2)
 
     # Smooth the high resolution image to the low resolution one
-    # Here need to reead the header of the low resolution image, 
+    # Here need to reead the header of the low resolution image,
     # to know what is the targeted resolution
     targres = 0.0
     im1 = smoothing(im1, targres)
 
     #* Image Registration (Match astrometry)
     #  [Should be an optional step]
-    #  The initial offsets between images should not be too big. Otherwise 
+    #  The initial offsets between images should not be too big. Otherwise
     #  the correlation might be trapped to a local maximum.
     # Package exist, but not sure how to use it.
 
     # Derive Spectral index and Make interpolation
-    interpol, interpol_header, interpol_hdu = freq_filling(im1, im2, hd1, hd2, hd3)   
+    interpol, interpol_header, interpol_hdu = freq_filling(im1, im2, hd1, hd2, hd3)
 
     # output .fits file
     if output_fits:
@@ -406,7 +419,7 @@ def AKB_combine(hires, lores,
                 highresextnum=0,
                 lowresextnum=0,
                 highresscalefactor=1.0,
-                lowresscalefactor=1.0, 
+                lowresscalefactor=1.0,
                 lowresfwhm=1*u.arcmin,
                 targres = -1.0,
                 return_hdu=False,
@@ -457,7 +470,7 @@ def AKB_combine(hires, lores,
 
     #* Image Registration (Match astrometry)
     #  [Should be an optional step]
-    #  The initial offsets between images should not be too big. Otherwise 
+    #  The initial offsets between images should not be too big. Otherwise
     #  the correlation might be trapped to a local maximum.
     # Package exist, but not sure how to use it.
 
@@ -485,7 +498,7 @@ def AKB_combine(hires, lores,
 
     #* generate amplitude plot and PDF output
     akb_plot(fft1, fft2, fftsum)
-    
+
     #* Generate the CASA 4.3 compatible header
     combo_header = casaheader(hdu1.header)
 
@@ -507,7 +520,74 @@ def AKB_combine(hires, lores,
 # os.system("rm -rf output.fits")
 # f = AKB_combine("faint_final.shift.fix.fits","Dragon.im350.crop.fits", lowresscalefactor=0.0015,return_hdu=True)
 
-os.system("rm -rf output.fits")
-os.system("rm -rf interpolate.fits")
-interpol_hdu = AKB_interpol("Dragon.im350.crop.fits", "Dragon.im350.crop.fits", "faint_final.shift.fix.fits")
-f = AKB_combine("faint_final.shift.fix.fits",interpol_hdu, lowresscalefactor=0.0015,return_hdu=True)
+#os.system("rm -rf output.fits")
+#os.system("rm -rf interpolate.fits")
+#interpol_hdu = AKB_interpol("Dragon.im350.crop.fits", "Dragon.im350.crop.fits", "faint_final.shift.fix.fits")
+#f = AKB_combine("faint_final.shift.fix.fits",interpol_hdu, lowresscalefactor=0.0015,return_hdu=True)
+
+def feather_simple(hires, lores,
+                   highresextnum=0,
+                   lowresextnum=0,
+                   highresscalefactor=1.0,
+                   lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
+                   return_hdu=False,
+                   return_regridded_lores=False):
+    """
+    Fourier combine two single-plane images.
+
+    Parameters
+    ----------
+    highresfitsfile : str
+        The high-resolution FITS file
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    highresextnum : int
+        The extension number to use from the high-res FITS file
+    highresscalefactor : float
+    lowresscalefactor : float
+        A factor to multiply the high- or low-resolution data by to match the
+        low- or high-resolution data
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+    return_hdu : bool
+        Return an HDU instead of just an image.  It will contain two image
+        planes, one for the real and one for the imaginary data.
+    return_regridded_lores : bool
+        Return the 2nd image regridded into the pixel space of the first?
+
+    Returns
+    -------
+    combo : image
+        The image of the combined low and high resolution data sets
+    combo_hdu : fits.PrimaryHDU
+        (optional) the image encased in a FITS HDU with the relevant header
+    """
+    if isinstance(hires, (fits.ImageHDU, fits.PrimaryHDU)):
+        hdu_hi = hires
+    else:
+        hdu_hi = fits.open(hires)[highresextnum]
+    if isinstance(lores, (fits.ImageHDU, fits.PrimaryHDU)):
+        hdu_low = lores
+    else:
+        hdu_low = fits.open(lores)[lowresextnum]
+
+    im_hi = hdu_hi.data.squeeze()
+    im_lowraw = hdu_low.data.squeeze()
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(hdu_hi, im_hi, im_lowraw, hdu_low)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
+    fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
+                             im_low*lowresscalefactor)
+
+    if return_hdu:
+        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
+        combo = combo_hdu
+
+    if return_regridded_lores:
+        return combo, hdu_low
+    else:
+        return combo
