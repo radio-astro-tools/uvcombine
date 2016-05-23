@@ -615,46 +615,91 @@ def feather_plot(hires, lores,
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
+    pb = ProgressBar(12)
+
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
+    pb.update()
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    pb.update()
     kfft = np.fft.fftshift(kfft)
+    pb.update()
     ikfft = np.fft.fftshift(ikfft)
+    pb.update()
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+    pb.update()
     fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+    pb.update()
 
     rad,azavg_kernel = image_tools.radialprofile.azimuthalAverage(np.abs(kfft), returnradii=True)
+    pb.update()
     rad,azavg_ikernel = image_tools.radialprofile.azimuthalAverage(np.abs(ikfft), returnradii=True)
+    pb.update()
     rad,azavg_hi = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi), returnradii=True)
+    pb.update()
     rad,azavg_lo = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo), returnradii=True)
+    pb.update()
     rad,azavg_hi_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi*ikfft), returnradii=True)
+    pb.update()
     rad,azavg_lo_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo*kfft), returnradii=True)
+    pb.update()
 
-    rad_as = (pixscale*3600) / rad
+    # use the same "OK" mask for everything because it should just be an artifact
+    # of the averaging
+    OK = np.isfinite(azavg_kernel)
+
+    # 1/min(rad) ~ number of pixels from center to corner of image
+    # pixscale in degrees.  Convert # pixels to arcseconds
+    # 2 pixels = where rad is 1/2 the image (square) dimensions
+    # (nax1) pixels = where rad is 1
+    # *** ASSUMES SQUARE ***
+    rad_pix = nax1/rad
+    rad_as = pixscale * 3600 * rad_pix
+    log.debug("pixscale={0} nax1={1}".format(pixscale, nax1))
 
     import pylab as pl
 
     pl.clf()
-    ax1 = pl.subplot(3,1,1)
-    ax1.loglog(rad_as, azavg_kernel, color='b', linewidth=2, alpha=0.8,
+    ax1 = pl.subplot(2,1,1)
+    ax1.loglog(rad_as[OK], azavg_kernel[OK], color='b', linewidth=2, alpha=0.8,
                label="Low-res Kernel")
-    ax1.loglog(rad_as, azavg_ikernel, color='r', linewidth=2, alpha=0.8,
+    ax1.loglog(rad_as[OK], azavg_ikernel[OK], color='r', linewidth=2, alpha=0.8,
                label="High-res Kernel")
+    ax1.vlines(lowresfwhm.to(u.arcsec).value, 1e-5, 1.1, linestyle='--', color='k')
+    ax1.set_ylim(1e-5, 1.1)
+    arg_xmin = np.nanargmin(np.abs((azavg_kernel)-1e-5))
+    xlim = rad_as[arg_xmin], rad_as[2]
+    log.debug("Xlim: {0}".format(xlim))
+    assert all(np.isfinite(xlim))
+    ax1.set_xlim(*xlim)
 
-    ax2 = pl.subplot(3,1,2)
-    ax2.loglog(rad_as, azavg_lo, color='b', linewidth=2, alpha=0.8,
+
+    ax2 = pl.subplot(2,1,2)
+    ax2.loglog(rad_as[OK], azavg_lo[OK], color='b', linewidth=2, alpha=0.8,
                label="Low-res image")
-    ax2.loglog(rad_as, azavg_hi, color='r', linewidth=2, alpha=0.8,
+    ax2.loglog(rad_as[OK], azavg_hi[OK], color='r', linewidth=2, alpha=0.8,
                label="High-res image")
+    ax2.set_xlim(*xlim)
+    ax2.set_ylim(min([azavg_lo[arg_xmin], azavg_lo[2], azavg_hi[arg_xmin], azavg_hi[2]]),
+                 1.1*max([np.nanmax(azavg_lo), np.nanmax(azavg_hi)]),
+                )
 
-    ax3 = pl.subplot(3,1,3)
-    ax3.loglog(rad_as, azavg_lo_scaled, color='b', linewidth=2, alpha=0.8,
+    ax3 = pl.subplot(2,1,2)
+    ax3.loglog(rad_as[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
+               linestyle='--',
                label="Low-res scaled image")
-    ax3.loglog(rad_as, azavg_hi_scaled, color='r', linewidth=2, alpha=0.8,
+    ax3.loglog(rad_as[OK], azavg_hi_scaled[OK], color='r', linewidth=2, alpha=0.5,
+               linestyle='--',
                label="High-res scaled image")
+    ax3.set_xlim(*xlim)
     ax3.set_xlabel("Size Scale (arcsec)")
+    ax3.set_ylim(min([azavg_lo_scaled[arg_xmin], azavg_lo_scaled[2], azavg_hi_scaled[arg_xmin], azavg_hi_scaled[2]]),
+                 1.1*max([np.nanmax(azavg_lo_scaled), np.nanmax(azavg_hi_scaled)]),
+                )
+
+    return rad, rad_as, azavg_kernel, azavg_ikernel, azavg_lo, azavg_hi, azavg_lo_scaled, azavg_hi_scaled
 
 def spectral_regrid(cube, outgrid):
     """
@@ -721,3 +766,33 @@ def spectral_regrid(cube, outgrid):
     newheader['CUNIT3'] = outgrid.unit.to_string('FITS')
 
     return fits.PrimaryHDU(data=newcube, header=newheader)
+
+
+def spectral_smooth_and_downsample(cube, ):
+
+    tbcube_k_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(tpcube_k,
+                                                                  kw/np.sqrt(8*np.log(2)))
+    log.debug("completed cube smooth")
+
+    integer_dsfactor = int(np.floor(kw))
+
+    tpcube_k_ds = tbcube_k_smooth[::integer_dsfactor,:,:]
+    log.debug("downsampled")
+    print(tpcube_k)
+    print(tpcube_k.hdu)
+    tpcube_k.hdu
+    log.debug("did nothing")
+    tpcube_k_ds_hdu = tpcube_k.hdu
+    log.debug("made hdu")
+    tpcube_k_ds_hdu.data = tpcube_k_ds
+    log.debug("put data in hdu")
+    tpcube_k_ds_hdu.header['CRPIX3'] = 1
+    # why min? because we're forcing CDELT3 to be positive, therefore the 0'th channel
+    # must be the reference value.  Since we're using a symmetric kernel to downsample,
+    # the reference channel - wherever we pick it - must stay fixed.
+    tpcube_k_ds_hdu.header['CRVAL3'] = tpcube_k.spectral_axis[0].to(u.Hz).value
+    tpcube_k_ds_hdu.header['CUNIT3'] = tpcube_k.spectral_axis[0].to(u.Hz).unit.to_string('FITS')
+    tpcube_k_ds_hdu.header['CDELT3'] = tpcube_k.wcs.wcs.cdelt[2] * integer_dsfactor
+    log.debug("completed header making")
+    #tpcube_k_ds_hdu.writeto('{0}_tp_freq_ds.fits', clobber=True)
+    #log.debug("wrote kelvin tp downsampled cube")
