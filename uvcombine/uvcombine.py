@@ -615,6 +615,7 @@ def feather_plot(hires, lores,
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
+    print("featherplot")
     pb = ProgressBar(12)
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
@@ -622,6 +623,8 @@ def feather_plot(hires, lores,
     pb.update()
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    log.debug("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
+    print("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
     pb.update()
     kfft = np.fft.fftshift(kfft)
     pb.update()
@@ -670,10 +673,12 @@ def feather_plot(hires, lores,
     ax1.vlines(lowresfwhm.to(u.arcsec).value, 1e-5, 1.1, linestyle='--', color='k')
     ax1.set_ylim(1e-5, 1.1)
     arg_xmin = np.nanargmin(np.abs((azavg_kernel)-1e-5))
-    xlim = rad_as[arg_xmin], rad_as[2]
+    xlim = rad_as[arg_xmin]/1.1, rad_as[1]*1.1
     log.debug("Xlim: {0}".format(xlim))
     assert all(np.isfinite(xlim))
     ax1.set_xlim(*xlim)
+
+    ax1.set_ylabel("Kernel Weight")
 
 
     ax2 = pl.subplot(2,1,2)
@@ -685,6 +690,7 @@ def feather_plot(hires, lores,
     ax2.set_ylim(min([azavg_lo[arg_xmin], azavg_lo[2], azavg_hi[arg_xmin], azavg_hi[2]]),
                  1.1*max([np.nanmax(azavg_lo), np.nanmax(azavg_hi)]),
                 )
+    ax2.set_ylabel("Power spectrum $|FT|$")
 
     ax3 = pl.subplot(2,1,2)
     ax3.loglog(rad_as[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
@@ -768,31 +774,48 @@ def spectral_regrid(cube, outgrid):
     return fits.PrimaryHDU(data=newcube, header=newheader)
 
 
-def spectral_smooth_and_downsample(cube, ):
+def spectral_smooth_and_downsample(cube, kernelfwhm):
+    """
+    Smooth the cube along the spectral axis by a specific Gaussian kernel, then
+    downsample by an integer factor that still nyquist samples the smoothed
+    data.
 
-    tbcube_k_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(tpcube_k,
-                                                                  kw/np.sqrt(8*np.log(2)))
+    Parameters
+    ----------
+    cube : SpectralCube
+        A SpectralCube object to regrid
+    kernelfwhm : float
+        the full-width-half-max of the spectral kernel in pixels
+
+    Returns
+    -------
+    cube_ds_hdu : fits.PrimaryHDU
+        An HDU containing the output cube in FITS HDU form
+    """
+
+    kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
+    
+    cube_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(cube,
+                                                              kernelwidth)
     log.debug("completed cube smooth")
 
-    integer_dsfactor = int(np.floor(kw))
+    integer_dsfactor = int(np.floor(kernelwidth))
 
-    tpcube_k_ds = tbcube_k_smooth[::integer_dsfactor,:,:]
+    cube_ds = cube_smooth[::integer_dsfactor,:,:]
     log.debug("downsampled")
-    print(tpcube_k)
-    print(tpcube_k.hdu)
-    tpcube_k.hdu
+    cube.hdu # this is a hack to prevent abort traps (never figured out why these happened)
     log.debug("did nothing")
-    tpcube_k_ds_hdu = tpcube_k.hdu
+    cube_ds_hdu = cube.hdu
     log.debug("made hdu")
-    tpcube_k_ds_hdu.data = tpcube_k_ds
+    cube_ds_hdu.data = cube_ds
     log.debug("put data in hdu")
-    tpcube_k_ds_hdu.header['CRPIX3'] = 1
+    cube_ds_hdu.header['CRPIX3'] = 1
     # why min? because we're forcing CDELT3 to be positive, therefore the 0'th channel
     # must be the reference value.  Since we're using a symmetric kernel to downsample,
     # the reference channel - wherever we pick it - must stay fixed.
-    tpcube_k_ds_hdu.header['CRVAL3'] = tpcube_k.spectral_axis[0].to(u.Hz).value
-    tpcube_k_ds_hdu.header['CUNIT3'] = tpcube_k.spectral_axis[0].to(u.Hz).unit.to_string('FITS')
-    tpcube_k_ds_hdu.header['CDELT3'] = tpcube_k.wcs.wcs.cdelt[2] * integer_dsfactor
+    cube_ds_hdu.header['CRVAL3'] = cube.spectral_axis[0].to(u.Hz).value
+    cube_ds_hdu.header['CUNIT3'] = cube.spectral_axis[0].to(u.Hz).unit.to_string('FITS')
+    cube_ds_hdu.header['CDELT3'] = cube.wcs.wcs.cdelt[2] * integer_dsfactor
     log.debug("completed header making")
-    #tpcube_k_ds_hdu.writeto('{0}_tp_freq_ds.fits', clobber=True)
-    #log.debug("wrote kelvin tp downsampled cube")
+
+    return cube_ds_hdu
