@@ -799,10 +799,11 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
                                                               kernelwidth)
     log.debug("completed cube smooth")
 
-    integer_dsfactor = int(np.floor(kernelwidth))
+    integer_dsfactor = int(np.floor(kernelfwhm))
 
     cube_ds = cube_smooth[::integer_dsfactor,:,:]
     log.debug("downsampled")
+    print(cube.hdu) # this is a hack to prevent abort traps (never figured out why these happened)
     cube.hdu # this is a hack to prevent abort traps (never figured out why these happened)
     log.debug("did nothing")
     cube_ds_hdu = cube.hdu
