@@ -7,6 +7,8 @@ from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
+from FITS_tools.cube_regrid import regrid_cube_hdu
+from astropy import wcs
 
 def file_in(filename, extnum=0):
     """
@@ -820,3 +822,90 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     log.debug("completed header making")
 
     return cube_ds_hdu
+
+def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
+                          highresscalefactor=1.0,
+                          lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
+                          return_regridded_cube_lo=False,
+                          return_hdu=False,
+                         ):
+    """
+    Fourier combine two data cubes
+
+    Parameters
+    ----------
+    cube_hi : SpectralCube
+    highresfitsfile : str
+        The high-resolution FITS file
+    cube_lo : SpectralCube
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    highresextnum : int
+        The extension number to use from the high-res FITS file
+    highresscalefactor : float
+    lowresscalefactor : float
+        A factor to multiply the high- or low-resolution data by to match the
+        low- or high-resolution data
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+    return_hdu : bool
+        Return an HDU instead of just a cube.  It will contain two image
+        planes, one for the real and one for the imaginary data.
+    return_regridded_cube_lo : bool
+        Return the 2nd cube regridded into the pixel space of the first?
+    """
+    if isinstance(cube_hi, str):
+        cube_hi = SpectralCube.read(cube_hi)
+    if isinstance(cube_lo, str):
+        cube_lo = SpectralCube.read(cube_lo)
+
+    if cube_hi.size > 1e8:
+        raise ValueError("Cube is probably too large "
+                         "for this operation to work in memory")
+
+    im_hi = cube_hi._data # want the raw data for this
+    hd_hi = cube_hi.header
+    assert hd_hi['NAXIS'] == im_hi.ndim == 3
+    wcs_hi = cube_hi.wcs
+    pixscale = FITS_tools.header_tools.header_to_platescale(hd_hi)
+
+    cube_lo = cube_lo.to(cube_hi.unit)
+
+    assert cube_hi.unit == cube_lo.unit, 'Cubes must have same or equivalent unit'
+    assert cube_hi.unit.is_equivalent(u.Jy/u.beam) or cube_hi.unit.is_equivalent(u.K), "Cubes must have brightness units."
+
+    #fitshdu_low = regrid_fits_cube(lowresfitsfile, hd_hi)
+    log.info("Regridding cube (this step may take a while)")
+    fitshdu_low = regrid_cube_hdu(cube_lo.hdu, hd_hi)
+    #w2 = wcs.WCS(fitshdu_low.header)
+
+    nax1,nax2 = (hd_hi['NAXIS1'],
+                 hd_hi['NAXIS2'],
+                 )
+
+    dcube_hi = im_hi
+    dcube_lo = fitshdu_low.data
+    outcube = np.empty_like(dcube_hi)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
+    log.info("Fourier combining each of {0} slices".format(dcube_hi.shape[0]))
+    pb = ProgressBar(dcube_hi.shape[0])
+
+    for ii,(slc_hi,slc_lo) in enumerate(zip(dcube_hi, dcube_lo)):
+
+        fftsum, combo = fftmerge(kfft, ikfft, slc_hi*highresscalefactor,
+                                 slc_lo*lowresscalefactor)
+
+        outcube[ii,:,:] = combo.real
+
+        pb.update(ii+1)
+
+    if return_regridded_cube_lo:
+        return outcube, fitshdu_low
+    elif return_hdu:
+        return fits.PrimaryHDU(data=outcube, header=wcs_hi.to_header())
+    else:
+        return outcube
