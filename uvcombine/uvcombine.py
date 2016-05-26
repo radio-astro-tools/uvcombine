@@ -1,4 +1,5 @@
 import image_tools
+import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube
 from spectral_cube import wcs_utils
@@ -43,6 +44,9 @@ def file_in(filename, extnum=0):
     header = wcs_utils.strip_wcs_from_header(hdu.header)
     mywcs = wcs.WCS(hdu.header).celestial
     header.update(mywcs.to_header())
+    header['NAXIS'] = im.ndim
+    for ii,dim in enumerate(im.shape):
+        header['NAXIS{0}'.format(im.ndim-ii)] = dim
    
     return hdu, im, header
 
@@ -116,7 +120,7 @@ def regrid(hd1, im1, im2raw, hd2):
     # regrid the image
     #hdu2 = hcongrid_hdu(hdu2, hd1)
     #im2 = hdu2.data.squeeze()
-    im2 = reproject_interp(hdu2, hd1)
+    im2, coverage = reproject_interp(hdu2, hd1)
 
     # return variables
     return hdu2, im2, nax1, nax2, pixscale
@@ -223,7 +227,7 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
 
 
-def fftmerge(kfft,ikfft,im_hi,im_lo):
+def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False):
     """
     Combine images in the fourier domain, and then output the combined image
     both in fourier domain and the image domain.
@@ -234,6 +238,10 @@ def fftmerge(kfft,ikfft,im_hi,im_lo):
        Weighting images.
     im1,im2: float array
        Input images.
+    highpassfilterSD: bool or str
+        Re-convolve the SD image with the beam?  If ``True``, the SD image will
+        be weighted by the deconvolved beam.  If ``reconvolve``, will be
+        convolved with the lowresfwhm beam.
 
     Returns
     -------
@@ -247,7 +255,12 @@ def fftmerge(kfft,ikfft,im_hi,im_lo):
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
     # Combine and inverse fourier transform the images
-    fftsum = kfft*fft_lo + ikfft*fft_hi
+    if highpassfilterSD:
+        lo_conv = kfft*fft_lo
+    else:
+        lo_conv = fft_lo
+
+    fftsum = lo_conv + ikfft*fft_hi
 
     combo = np.fft.ifft2(fftsum)
 
@@ -532,7 +545,9 @@ def feather_simple(hires, lores,
                    highresextnum=0,
                    lowresextnum=0,
                    highresscalefactor=1.0,
-                   lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
+                   lowresscalefactor=1.0,
+                   lowresfwhm=None,
+                   highpassfilterSD=False,
                    return_hdu=False,
                    return_regridded_lores=False):
     """
@@ -554,6 +569,15 @@ def feather_simple(hires, lores,
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
+    highpassfilterSD: bool or str
+        Re-convolve the SD image with the beam?  If ``True``, the SD image will
+        be weighted by the beam, which effectively means it will be convolved
+        with the beam before merging with the interferometer data.  This isn't
+        really the right behavior; it should be filtered with the *deconvolved*
+        beam, but in the current framework that effectively means "don't weight
+        the single dish data".  See
+        http://keflavich.github.io/blog/what-does-feather-do.html
+        for further details about what feather does and how this relates.
     return_hdu : bool
         Return an HDU instead of just an image.  It will contain two image
         planes, one for the real and one for the imaginary data.
@@ -570,13 +594,19 @@ def feather_simple(hires, lores,
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
+    if lowresfwhm is None:
+        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        lowresfwhm = beam_low.major
+
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
 
-    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,
+                                )
 
     fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
-                             im_low*lowresscalefactor)
+                             im_low*lowresscalefactor,
+                             highpassfilterSD=highpassfilterSD)
 
     if return_hdu:
         combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
@@ -591,7 +621,9 @@ def feather_plot(hires, lores,
                  highresextnum=0,
                  lowresextnum=0,
                  highresscalefactor=1.0,
-                 lowresscalefactor=1.0, lowresfwhm=1*u.arcmin
+                 lowresscalefactor=1.0,
+                 lowresfwhm=None,
+                 highpassfilterSD=False,
                 ):
     """
     Plot the power spectra of two images that would be combined
@@ -639,6 +671,9 @@ def feather_plot(hires, lores,
     pb.update()
     ikfft = np.fft.fftshift(ikfft)
     pb.update()
+
+    if not highpassfilterSD:
+        kfft[:] = 1
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
     pb.update()
