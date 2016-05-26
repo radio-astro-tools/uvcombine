@@ -1,13 +1,15 @@
 import image_tools
-from FITS_tools.hcongrid import hcongrid_hdu
-import FITS_tools
+from reproject import reproject_interp
 from spectral_cube import SpectralCube
+from spectral_cube import wcs_utils
 from astropy.io import fits
 from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-from FITS_tools.cube_regrid import regrid_cube_hdu
+#import FITS_tools
+#from FITS_tools.hcongrid import hcongrid_hdu
+#from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import wcs
 
 def file_in(filename, extnum=0):
@@ -37,7 +39,10 @@ def file_in(filename, extnum=0):
         hdu = fits.open(filename)[extnum]
    
     im = hdu.data.squeeze()
-    header = FITS_tools.strip_headers.flatten_header(hdu.header)
+    #header = FITS_tools.strip_headers.flatten_header(hdu.header)
+    header = wcs_utils.strip_wcs_from_header(hdu.header)
+    mywcs = wcs.WCS(hdu.header).celestial
+    header.update(mywcs.to_header())
    
     return hdu, im, header
 
@@ -108,8 +113,9 @@ def regrid(hd1, im1, im2raw, hd2):
     hdu2 = fits.PrimaryHDU(data=im2raw, header=hd2)
 
     # regrid the image
-    hdu2 = hcongrid_hdu(hdu2, hd1)
-    im2 = hdu2.data.squeeze()
+    #hdu2 = hcongrid_hdu(hdu2, hd1)
+    #im2 = hdu2.data.squeeze()
+    im2 = reproject_interp(hdu2, hd1)
 
     # return variables
     return hdu2, im2, nax1, nax2, pixscale
@@ -805,9 +811,15 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 
     cube_ds = cube_smooth[::integer_dsfactor,:,:]
     log.debug("downsampled")
-    print(cube.hdu) # this is a hack to prevent abort traps (never figured out why these happened)
+    (cube.wcs.wcs)
+    (cube.wcs)
+    log.debug("wcs'd")
+    cube.filled_data[:]
+    log.debug("filled_data")
+    (cube.hdu) # this is a hack to prevent abort traps (never figured out why these happened)
+    log.debug("hdu'd")
     cube.hdu # this is a hack to prevent abort traps (never figured out why these happened)
-    log.debug("did nothing")
+    log.debug("hdu'd again")
     cube_ds_hdu = cube.hdu
     log.debug("made hdu")
     cube_ds_hdu.data = cube_ds
@@ -878,7 +890,11 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
 
     #fitshdu_low = regrid_fits_cube(lowresfitsfile, hd_hi)
     log.info("Regridding cube (this step may take a while)")
-    fitshdu_low = regrid_cube_hdu(cube_lo.hdu, hd_hi)
+    # old version, using FITS_tools
+    #fitshdu_low = regrid_cube_hdu(cube_lo.hdu, hd_hi)
+    # new version, using reproject & spectral-cube
+    cube_lo_rg = cube_lo.reproject(hd_hi)
+    fitshdu_low = cube_lo_rg.hdu
     #w2 = wcs.WCS(fitshdu_low.header)
 
     nax1,nax2 = (hd_hi['NAXIS1'],
