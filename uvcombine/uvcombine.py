@@ -7,7 +7,7 @@ from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-#import FITS_tools
+import FITS_tools
 #from FITS_tools.hcongrid import hcongrid_hdu
 #from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import wcs
@@ -101,7 +101,8 @@ def regrid(hd1, im1, im2raw, hd2):
     assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension non-equal to 2.'
 
     # read pixel scale from the header of high resolution image
-    pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
+    #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
+    pixscale = wcs.utils.proj_plane_pixel_scales(wcs.WCS(hd1))[0]
     log.debug('pixscale = {0}'.format(pixscale))
 
     # read the image array size from the high resolution image
@@ -803,6 +804,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 
     kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
     
+    # there may not be an alternative to this anywhere in the astropy ecosystem
     cube_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(cube,
                                                               kernelwidth)
     log.debug("completed cube smooth")
