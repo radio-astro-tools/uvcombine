@@ -1,3 +1,12 @@
+"""
+Code for fourier-space combination of single dish and interferometer data
+(or zero-spacing and non-zero-spacing data).  See:
+
+    Stanimirovic et al 1999 (http://esoads.eso.org/abs/1999MNRAS.302..417S)
+    (compares single-dish and interferometer data over commonly sampled
+    UV space, but then does image combination + image-space deconvolution,
+    which is not performed here)
+"""
 import image_tools
 import radio_beam
 from reproject import reproject_interp
@@ -106,8 +115,9 @@ def regrid(hd1, im1, im2raw, hd2):
 
     # read pixel scale from the header of high resolution image
     #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
-    pixscale = wcs.utils.proj_plane_pixel_scales(wcs.WCS(hd1))[0]
-    log.debug('pixscale = {0}'.format(pixscale))
+    #pixscale = wcs.utils.proj_plane_pixel_scales(wcs.WCS(hd1))[0]
+    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(hd1))**0.5
+    log.debug('pixscale = {0} deg'.format(pixscale))
 
     # read the image array size from the high resolution image
     nax1,nax2 = (hd1['NAXIS1'],
@@ -227,7 +237,8 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
 
 
-def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False):
+def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False,
+             deconvSD=False, min_beam_fraction=0.1):
     """
     Combine images in the fourier domain, and then output the combined image
     both in fourier domain and the image domain.
@@ -246,6 +257,13 @@ def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False
         If set, will simply replace the fourier transform of the single-dish
         data with the fourier transform of the interferometric data above
         the specified kernel level.  Overrides other parameters.
+    deconvSD: bool
+        Deconvolve the single-dish data before adding in fourier space?
+        This "deconvolution" is a simple division of the fourier transform
+        of the single dish image by its fourier transformed beam
+    min_beam_fraction : float
+        The minimum fraction of the beam to include; values below this fraction
+        will be discarded when deconvolving
 
     Returns
     -------
@@ -270,6 +288,9 @@ def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False
         # Combine and inverse fourier transform the images
         if highpassfilterSD:
             lo_conv = kfft*fft_lo
+        elif deconvSD:
+            lo_conv = fft_lo / kfft
+            lo_conv[kfft < min_beam_fraction] = 0
         else:
             lo_conv = fft_lo
 
@@ -552,6 +573,26 @@ def AKB_combine(hires, lores,
 #interpol_hdu = AKB_interpol("Dragon.im350.crop.fits", "Dragon.im350.crop.fits", "faint_final.shift.fix.fits")
 #f = AKB_combine("faint_final.shift.fix.fits",interpol_hdu, lowresscalefactor=0.0015,return_hdu=True)
 
+def simple_deconvolve_sdim(hdu, lowresfwhm):
+    """
+    Perform a very simple fourier-space deconvolution of single-dish data.
+    i.e., divide the fourier transform of the single-dish data by the fourier
+    transform of its beam, and fourier transform back.
+
+    This is not a generally useful method!
+    """
+    hdu_low, im_lowraw, header_low = file_in(hdu)
+    nax2,nax1 = im_lowraw.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_low))**0.5
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_lowraw)))
+    decfft_lo = fft_lo / np.abs(kfft)
+    dec_lo = np.fft.ifft2(decfft_lo)
+    return dec_lo
+
+
+
 def feather_simple(hires, lores,
                    highresextnum=0,
                    lowresextnum=0,
@@ -560,13 +601,24 @@ def feather_simple(hires, lores,
                    lowresfwhm=None,
                    highpassfilterSD=False,
                    replace_hires=False,
+                   deconvSD=False,
                    return_hdu=False,
                    return_regridded_lores=False):
     """
     Fourier combine two single-plane images.  This follows the CASA approach,
-    as far as it is discernable.
+    as far as it is discernable.  Both images should be actual images of the
+    sky in the same units, not fourier models or deconvolved images.
 
-    There is a remainin question: does CASA-feather re-weight the SD image by
+    The default parameters follow Equation 11 in section 5.2 of
+    http://esoads.eso.org/abs/2002ASPC..278..375S
+    very closely, except the interferometric data are not re-convolved with the
+    interferometric beam.  It seems that S5.2 of Stanimirovic et al 2002
+    actually wants the deconvolved *model* data, not the deconvolved *clean*
+    data, as input, which would explain their equation.  This may be a
+    different use of the same words.  ``lowresscalefactor`` corresponds to
+    their ``f`` parameter.
+
+    There is a remaining question: does CASA-feather re-weight the SD image by
     its beam, as suggested in
     https://science.nrao.edu/science/meetings/2016/vla-data-reduction/DR2016imaging_jott.pdf
     page 24, or does it leave the single-dish image unweighted (assuming its
@@ -602,6 +654,10 @@ def feather_simple(hires, lores,
         If set, will simply replace the fourier transform of the single-dish
         data with the fourier transform of the interferometric data above
         the specified kernel level.  Overrides other parameters.
+    deconvSD: bool
+        Deconvolve the single-dish data before adding in fourier space?
+        This "deconvolution" is a simple division of the fourier transform
+        of the single dish image by its fourier transformed beam
     return_hdu : bool
         Return an HDU instead of just an image.  It will contain two image
         planes, one for the real and one for the imaginary data.
@@ -630,7 +686,9 @@ def feather_simple(hires, lores,
     fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
                              im_low*lowresscalefactor,
                              replace_hires=replace_hires,
-                             highpassfilterSD=highpassfilterSD)
+                             highpassfilterSD=highpassfilterSD,
+                             deconvSD=deconvSD,
+                            )
 
     if return_hdu:
         combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
@@ -648,6 +706,7 @@ def feather_plot(hires, lores,
                  lowresscalefactor=1.0,
                  lowresfwhm=None,
                  highpassfilterSD=False,
+                 xaxisunit='arcsec',
                 ):
     """
     Plot the power spectra of two images that would be combined
@@ -669,6 +728,9 @@ def feather_plot(hires, lores,
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
+    xaxisunit : 'arcsec' or 'lambda'
+        The X-axis units.  Either arcseconds (angular scale on the sky)
+        or baseline length (lambda)
 
     Returns
     -------
@@ -681,7 +743,7 @@ def feather_plot(hires, lores,
     hdu_low, im_lowraw, header_low = file_in(lores)
 
     print("featherplot")
-    pb = ProgressBar(12)
+    pb = ProgressBar(13)
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
@@ -695,9 +757,6 @@ def feather_plot(hires, lores,
     pb.update()
     ikfft = np.fft.fftshift(ikfft)
     pb.update()
-
-    if not highpassfilterSD:
-        kfft[:] = 1
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
     pb.update()
@@ -716,6 +775,8 @@ def feather_plot(hires, lores,
     pb.update()
     rad,azavg_lo_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo*kfft), returnradii=True)
     pb.update()
+    rad,azavg_lo_deconv = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo/kfft), returnradii=True)
+    pb.update()
 
     # use the same "OK" mask for everything because it should just be an artifact
     # of the averaging
@@ -729,19 +790,28 @@ def feather_plot(hires, lores,
     rad_pix = nax1/rad
     rad_as = pixscale * 3600 * rad_pix
     log.debug("pixscale={0} nax1={1}".format(pixscale, nax1))
+    if xaxisunit == 'lambda':
+        #restfrq = (wcs.WCS(hd1).wcs.restfrq*u.Hz)
+        lam = 1./(rad_as*u.arcsec).to(u.rad).value
+        xaxis = lam
+    elif xaxisunit == 'arcsec':
+        xaxis = rad_as
+    else:
+        raise ValueError("xaxisunit must be in (arcsec, lambda)")
+
 
     import pylab as pl
 
     pl.clf()
     ax1 = pl.subplot(2,1,1)
-    ax1.loglog(rad_as[OK], azavg_kernel[OK], color='b', linewidth=2, alpha=0.8,
+    ax1.loglog(xaxis[OK], azavg_kernel[OK], color='b', linewidth=2, alpha=0.8,
                label="Low-res Kernel")
-    ax1.loglog(rad_as[OK], azavg_ikernel[OK], color='r', linewidth=2, alpha=0.8,
+    ax1.loglog(xaxis[OK], azavg_ikernel[OK], color='r', linewidth=2, alpha=0.8,
                label="High-res Kernel")
     ax1.vlines(lowresfwhm.to(u.arcsec).value, 1e-5, 1.1, linestyle='--', color='k')
     ax1.set_ylim(1e-5, 1.1)
-    arg_xmin = np.nanargmin(np.abs((azavg_kernel)-1e-5))
-    xlim = rad_as[arg_xmin]/1.1, rad_as[1]*1.1
+    arg_xmin = np.nanargmin(np.abs((azavg_ikernel)-(1-1e-5)))
+    xlim = xaxis[arg_xmin]/1.1, xaxis[1]*1.1
     log.debug("Xlim: {0}".format(xlim))
     assert all(np.isfinite(xlim))
     ax1.set_xlim(*xlim)
@@ -750,9 +820,9 @@ def feather_plot(hires, lores,
 
 
     ax2 = pl.subplot(2,1,2)
-    ax2.loglog(rad_as[OK], azavg_lo[OK], color='b', linewidth=2, alpha=0.8,
+    ax2.loglog(xaxis[OK], azavg_lo[OK], color='b', linewidth=2, alpha=0.8,
                label="Low-res image")
-    ax2.loglog(rad_as[OK], azavg_hi[OK], color='r', linewidth=2, alpha=0.8,
+    ax2.loglog(xaxis[OK], azavg_hi[OK], color='r', linewidth=2, alpha=0.8,
                label="High-res image")
     ax2.set_xlim(*xlim)
     ax2.set_ylim(min([azavg_lo[arg_xmin], azavg_lo[2], azavg_hi[arg_xmin], azavg_hi[2]]),
@@ -761,14 +831,22 @@ def feather_plot(hires, lores,
     ax2.set_ylabel("Power spectrum $|FT|$")
 
     ax3 = pl.subplot(2,1,2)
-    ax3.loglog(rad_as[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
+    ax3.loglog(xaxis[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
                linestyle='--',
                label="Low-res scaled image")
-    ax3.loglog(rad_as[OK], azavg_hi_scaled[OK], color='r', linewidth=2, alpha=0.5,
+    ax3.loglog(xaxis[OK], azavg_lo_deconv[OK], color='b', linewidth=2, alpha=0.5,
+               linestyle=':',
+               label="Low-res deconvolved image")
+    ax3.loglog(xaxis[OK], azavg_hi_scaled[OK], color='r', linewidth=2, alpha=0.5,
                linestyle='--',
                label="High-res scaled image")
     ax3.set_xlim(*xlim)
-    ax3.set_xlabel("Size Scale (arcsec)")
+    if xaxisunit == 'arcsec':
+        ax3.set_xlabel("Angular Scale (arcsec)")
+    elif xaxisunit == 'lambda':
+        ax3.set_xscale('linear')
+        ax3.set_xlim(0, xlim[0])
+        ax3.set_xlabel("Baseline Length (lambda)")
     ax3.set_ylim(min([azavg_lo_scaled[arg_xmin], azavg_lo_scaled[2], azavg_hi_scaled[arg_xmin], azavg_hi_scaled[2]]),
                  1.1*max([np.nanmax(azavg_lo_scaled), np.nanmax(azavg_hi_scaled)]),
                 )
@@ -988,9 +1066,12 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
         return outcube
 
 def feather_compare(hires, lores,
-                    highresLAS,
+                    SAS,
+                    LAS,
                     lowresfwhm,
+                    beam_divide_lores=True,
                     highpassfilterSD=False,
+                    min_beam_fraction=0.1,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1002,15 +1083,24 @@ def feather_compare(hires, lores,
         The high-resolution FITS file
     lowresfitsfile : str
         The low-resolution (single-dish) FITS file
+    SAS : `astropy.units.Quantity`
+        The smallest angular scale to plot
+    LAS : `astropy.units.Quantity`
+        The largest angular scale to plot (probably the LAS of the high
+        resolution data)
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
-    highresLAS : `astropy.units.Quantity`
-        The largest angular scale of the high resolution data
+    beam_divide_lores: bool
+        Divide the low-resolution data by the beam weight before plotting?
+        (should do this: otherwise, you are plotting beam-downweighted data)
+    min_beam_fraction : float
+        The minimum fraction of the beam to include; values below this fraction
+        will be discarded when deconvolving
 
     """
-    assert highresLAS > lowresfwhm
+    assert LAS > SAS
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
@@ -1025,19 +1115,24 @@ def feather_compare(hires, lores,
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
     angscales = nax1/rr * pixscale*u.deg
 
-    if not highpassfilterSD:
-        kfft[:] = 1
-
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
     fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    fft_lo_deconvolved = fft_lo / kfft
+    fft_lo_deconvolved[kfft < min_beam_fraction] = np.nan
 
-    mask = (angscales > lowresfwhm) & (angscales < highresLAS)
+    mask = (angscales > SAS) & (angscales < LAS)
     assert mask.sum() > 0
 
     import pylab as pl
     pl.clf()
-    pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo)[mask], '.')
+    pl.suptitle("{0} - {1}".format(SAS,LAS))
+    pl.subplot(1,2,1)
+    pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
     mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
     pl.plot(mm, mm, 'k--')
     pl.xlabel("High-resolution")
     pl.ylabel("Low-resolution")
+    pl.subplot(1,2,2)
+    ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
+    pl.hist(ratio[np.isfinite(ratio)])
+    pl.xlabel("High-resolution / Low-resolution")
