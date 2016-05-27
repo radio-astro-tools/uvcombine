@@ -227,7 +227,7 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
 
 
-def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False):
+def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False):
     """
     Combine images in the fourier domain, and then output the combined image
     both in fourier domain and the image domain.
@@ -242,6 +242,10 @@ def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False):
         Re-convolve the SD image with the beam?  If ``True``, the SD image will
         be weighted by the deconvolved beam.  If ``reconvolve``, will be
         convolved with the lowresfwhm beam.
+    replace_hires: Quantity or False
+        If set, will simply replace the fourier transform of the single-dish
+        data with the fourier transform of the interferometric data above
+        the specified kernel level.  Overrides other parameters.
 
     Returns
     -------
@@ -254,13 +258,22 @@ def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False):
     fft_hi = np.fft.fft2(np.nan_to_num(im_hi))
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
-    # Combine and inverse fourier transform the images
-    if highpassfilterSD:
-        lo_conv = kfft*fft_lo
-    else:
-        lo_conv = fft_lo
+    if replace_hires:
+        fftsum = fft_lo.copy()
 
-    fftsum = lo_conv + ikfft*fft_hi
+        # mask where the hires data is above a threshold
+        mask = ikfft > replace_hires
+
+        fftsum[mask] = fft_hi[mask]
+
+    else:
+        # Combine and inverse fourier transform the images
+        if highpassfilterSD:
+            lo_conv = kfft*fft_lo
+        else:
+            lo_conv = fft_lo
+
+        fftsum = lo_conv + ikfft*fft_hi
 
     combo = np.fft.ifft2(fftsum)
 
@@ -449,8 +462,6 @@ def AKB_combine(hires, lores,
         The high-resolution FITS file
     lowresfitsfile : str
         The low-resolution (single-dish) FITS file
-    highresextnum : int
-        The extension number to use from the high-res FITS file
     highresscalefactor : float
     lowresscalefactor : float
         A factor to multiply the high- or low-resolution data by to match the
@@ -548,10 +559,19 @@ def feather_simple(hires, lores,
                    lowresscalefactor=1.0,
                    lowresfwhm=None,
                    highpassfilterSD=False,
+                   replace_hires=False,
                    return_hdu=False,
                    return_regridded_lores=False):
     """
-    Fourier combine two single-plane images.
+    Fourier combine two single-plane images.  This follows the CASA approach,
+    as far as it is discernable.
+
+    There is a remainin question: does CASA-feather re-weight the SD image by
+    its beam, as suggested in
+    https://science.nrao.edu/science/meetings/2016/vla-data-reduction/DR2016imaging_jott.pdf
+    page 24, or does it leave the single-dish image unweighted (assuming its
+    beam size is the same as the effective beam size of the image) as inferred
+    from the Feather source code?
 
     Parameters
     ----------
@@ -578,6 +598,10 @@ def feather_simple(hires, lores,
         the single dish data".  See
         http://keflavich.github.io/blog/what-does-feather-do.html
         for further details about what feather does and how this relates.
+    replace_hires: Quantity or False
+        If set, will simply replace the fourier transform of the single-dish
+        data with the fourier transform of the interferometric data above
+        the specified kernel level.  Overrides other parameters.
     return_hdu : bool
         Return an HDU instead of just an image.  It will contain two image
         planes, one for the real and one for the imaginary data.
@@ -601,11 +625,11 @@ def feather_simple(hires, lores,
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
 
-    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,
-                                )
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
                              im_low*lowresscalefactor,
+                             replace_hires=replace_hires,
                              highpassfilterSD=highpassfilterSD)
 
     if return_hdu:
@@ -962,3 +986,58 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
         return fits.PrimaryHDU(data=outcube, header=wcs_hi.to_header())
     else:
         return outcube
+
+def feather_compare(hires, lores,
+                    highresLAS,
+                    lowresfwhm,
+                    highpassfilterSD=False,
+                   ):
+    """
+    Compare the single-dish and interferometer data over the region where they
+    should agree
+
+    Parameters
+    ----------
+    highresfitsfile : str
+        The high-resolution FITS file
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+    highresLAS : `astropy.units.Quantity`
+        The largest angular scale of the high resolution data
+
+    """
+    assert highresLAS > lowresfwhm
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
+                                                   im_lowraw, header_low)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    kfft = np.fft.fftshift(kfft)
+    ikfft = np.fft.fftshift(ikfft)
+
+    yy,xx = np.indices([nax2, nax1])
+    rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
+    angscales = nax1/rr * pixscale*u.deg
+
+    if not highpassfilterSD:
+        kfft[:] = 1
+
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+
+    mask = (angscales > lowresfwhm) & (angscales < highresLAS)
+    assert mask.sum() > 0
+
+    import pylab as pl
+    pl.clf()
+    pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo)[mask], '.')
+    mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
+    pl.plot(mm, mm, 'k--')
+    pl.xlabel("High-resolution")
+    pl.ylabel("Low-resolution")
