@@ -5,6 +5,7 @@ from spectral_cube import SpectralCube
 from astropy.io import fits
 from astropy import units as u
 from astropy import log
+from astropy.convolution import convolve, Gaussian2DKernel
 from astropy.utils.console import ProgressBar
 import numpy as np
 
@@ -246,7 +247,7 @@ def fftmerge(kfft,ikfft,im_hi,im_lo):
 
 
 
-def smoothing(combo, targres):
+def smoothing(combo, targres, origfwhm, pixscale):
     """
     Smooth the image to the targeted final angular resolution.
 
@@ -256,8 +257,24 @@ def smoothing(combo, targres):
        Combined image
     targres : float
        The HPBW of the smoothed image (in units of arcsecond)
-    """
+    origfwhm : float
+       The original HPBW of input image (in units of arcsecond)
+    pixscale : float
+       The pixscale of the input image (in units of arcsecond)
 
+    Returns
+    -------
+    combo : float array
+       Smoothed image
+    """
+    fwhm = np.sqrt(8*np.log(2))
+    kernel_size=((targres/fwhm)**2-(hiresfwhm/fwhm)**2)**0.5
+    pixel_n = kernel_size/pixscale
+    
+    #smooth the image using gaussian 2d kernel
+    gauss_kernel =Gaussian2DKernel(pixel_n)
+    combo = convolve(combo, gauss_kernel,normalize_kernel=True)
+    
     return combo
 
 
@@ -389,7 +406,10 @@ def AKB_interpol(lores1, lores2, hires,
     # Here need to reead the header of the low resolution image,
     # to know what is the targeted resolution
     targres = 0.0
-    im1 = smoothing(im1, targres)
+    origfwhm =  0.0
+    pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
+
+    im1 = smoothing(im1, targres, origfwhm, pixscale)
 
     #* Image Registration (Match astrometry)
     #  [Should be an optional step]
@@ -488,7 +508,7 @@ def AKB_combine(hires, lores,
     #* Final Smoothing
     # [should be an optional step]
     if (targres > 0.0):
-        combo = smoothing(combo, targres)
+        combo = smoothing(combo, targres, origfwhm, pixscale)
 
     #* generate amplitude plot and PDF output
     akb_plot(fft1, fft2, fftsum)
