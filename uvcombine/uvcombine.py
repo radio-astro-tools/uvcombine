@@ -164,7 +164,7 @@ def flux_match(fft1, fft2):
     return fft1
 
 
-def color_correction_factors(n_center_hi, n_center_lo, pb_hi, pb_lo, alpha)
+def color_correction_factors(n_center_hi, n_center_lo, pb_hi, pb_lo, alpha):
     """
     Calculate the color correction factors for the input images before combination.
     This is to account for different nominal center frequency for different instruments, as 
