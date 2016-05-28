@@ -164,6 +164,52 @@ def flux_match(fft1, fft2):
     return fft1
 
 
+def color_correction_factors(n_center_hi, n_center_lo, pb_hi, pb_lo, alpha)
+    """
+    Calculate the color correction factors for the input images before combination.
+    This is to account for different nominal center frequency for different instruments, as 
+    well as different flux calibration process.
+    
+    Parameters
+    ----------
+    n_center_hi:
+       The nominal frequency center of high resolution image (GHz). 
+       This is the default frequency center of the output correction factors.
+    n_center_lo:
+       The nominal frequency center of high resolution image (GHz).
+    pb_hi:
+       The passband curve of high resolution observation (in ../filter/**).
+    pb_lo:
+       The passband curve of low resolution observation.
+    alpha:
+       The assumed spetra index of source emission. 
+     
+    Return
+    ------------
+    cc_hi:
+       Color correction factor for the high resolution image.
+    cc_lo:
+       Color correction factor for the low resolution image.
+    """
+    wv_hi, response_hi = pb_hi
+    wv_lo, response_lo = pb_lo
+    freq_hi = (wv_hi*u.um).to(u.GHz,equivalencies=u.spectral()).value
+    freq_lo = (wv_lo*u.um).to(u.GHz,equivalencies=u.spectral()).value
+    
+    #calculate the color corrections according to assumed source index
+    #here the default calibration for space telescope is Inum*num=const, for ground-based observations is Inum \propto num**2.
+    cc_hi = np.trapz(response_hi*(freq_hi/n_center_hi)**2, freq_hi)/np.trapz(response_hi*(freq_hi/n_center_hi)**alpha, freq_hi)
+    cc_lo = np.trapz(response_lo*(freq_lo/n_center_lo)**(-1), freq_lo)/np.trapz(response_lo*(freq_lo/n_center_lo)**alpha, freq_lo)
+    
+    #calculate the color correction for low resolution image to nominal frequency of high resolution image
+    cc_lo = cc_lo*(n_center_hi/n_center_lo)**alpha
+    
+    
+    return cc_hi, cc_lo
+
+    
+    
+
 
 def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     """
