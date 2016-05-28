@@ -314,11 +314,11 @@ def smoothing(combo, targres, origfwhm, pixscale):
        Smoothed image
     """
     fwhm = np.sqrt(8*np.log(2))
-    kernel_size=((targres/fwhm)**2-(hiresfwhm/fwhm)**2)**0.5
+    kernel_size = ((targres/fwhm)**2-(hiresfwhm/fwhm)**2)**0.5
     pixel_n = kernel_size/pixscale
     
     #smooth the image using gaussian 2d kernel
-    gauss_kernel =Gaussian2DKernel(pixel_n)
+    gauss_kernel = Gaussian2DKernel(pixel_n)
     combo = convolve(combo, gauss_kernel,normalize_kernel=True)
     
     return combo
