@@ -1,0 +1,111 @@
+import numpy as np
+import pylab as pl
+from astropy import units as u
+from astropy.io import fits
+from astropy.convolution import convolve_fft, Gaussian2DKernel
+import uvcombine
+import radio_beam
+from astropy import wcs
+
+
+def image_space_combination(lowres, highres):
+    """
+    This is the outline of a general implementation of image space combination;
+    it works for the specified files below.
+
+    Remaining problems:
+        - deconvolution appears only to work over the inner 1/4 of the image.
+        I don't know why.
+        - The deconvolved image needs to be reconvolved with the dirty beam
+        and subtracted from the original data to make a residual map.  It then
+        needs to be convolved with a (gaussian) restoring beam and added to the
+        residual map.
+    """
+    pass
+    # Stanimirovic 2002 Section 6.1: "Linear Combination" approach
+#    orig_fn = 'ForLinearCombination/combo_model.fits'
+#    clean_fn = 'ForLinearCombination/combo_alma.fits'
+#    dirty_fn = 'ForLinearCombination/combo_dirty.fits'
+#    dirtybeam_fn = 'ForLinearCombination/combo_psf.fits'
+#    tp_fn = 'ForLinearCombination/combo_sm_tp.fits'
+#
+#    singledishdiameter = 25*u.m
+#
+#    restfrq = fits.getheader(clean_fn)['RESTFRQ']*u.Hz
+#
+#    lowresfwhm = (1.22*(restfrq.to(u.m, u.spectral()) /
+#                        (singledishdiameter))).to(u.arcsec, u.dimensionless_angles())
+#    pixscale = fits.getheader(clean_fn)['CDELT2']*u.deg
+#
+#    int_beam = radio_beam.Beam.from_fits_header(fits.getheader(dirty_fn))
+#    tp_beam = radio_beam.Beam.from_fits_header(fits.getheader(tp_fn))
+#
+#    kernel_sigma_arcsec = lowresfwhm/(8*np.log(2))**0.5
+#    kernel_sigma = (kernel_sigma_arcsec/pixscale).decompose()
+#    # jybeam_ratio is the factor by which the data must be multiplied after
+#    # convolution to preserve the Jansky/beam units
+#    jybeam_ratio = (2*np.pi*kernel_sigma_arcsec**2 / int_beam.sr).decompose()
+#
+#    kernel = Gaussian2DKernel(kernel_sigma)
+#    conv = convolve_fft(fits.getdata(orig_fn).squeeze(), kernel)
+#    conv_largebeam = conv*jybeam_ratio
+#
+#    int_kernel_sigma_arcsec = int_beam.major/(8*np.log(2))**0.5
+#    int_kernel_sigma = (int_kernel_sigma_arcsec/pixscale).decompose()
+#    interferometer_kernel = Gaussian2DKernel(int_kernel_sigma)
+#
+#    smhdu = fits.open(orig_fn)
+#    smhdu[0].data = conv_largebeam.value
+#    smhdu[0].header['BMAJ'] = lowresfwhm.to(u.deg).value
+#    smhdu[0].header['BMIN'] = lowresfwhm.to(u.deg).value
+#    smhdu[0].header['BPA'] = 0.0
+#    smhdu[0].writeto(tp_fn, clobber=True)
+#
+#    cln = fits.getdata(clean_fn).squeeze()
+#    dirty = fits.getdata(dirty_fn).squeeze()
+#    tp = fits.getdata(tp_fn).squeeze()
+#
+#    alpha = int_beam.sr / tp_beam.sr
+#
+#    dirtybeamim = fits.getdata(dirtybeam_fn).squeeze()
+#    tpbeamkern = tp_beam.as_kernel(pixscale,
+#                                   x_size=dirtybeamim.shape[1],
+#                                   y_size=dirtybeamim.shape[0])
+#    tpbeamim = tpbeamkern.array / tpbeamkern.array.max()
+#
+#    combined = (dirty + alpha*tp)/(1+alpha)
+#    beam = (dirtybeamim + alpha*tpbeamim)/(1+alpha)
+#
+#    hduL = fits.open(clean_fn)
+#    hduL[0].data = combined.value
+#    hduL.writeto('ForLinearCombination/dirty_combined_image.fits', clobber=True)
+#    hduL = fits.open(clean_fn)
+#    hduL[0].data = beam.value
+#    hduL.writeto('ForLinearCombination/dirty_combined_psf.fits', clobber=True)
+#
+#    importfits('ForLinearCombination/dirty_combined_image.fits',
+#               'ForLinearCombination/dirty_combined_image.image',
+#               overwrite=True)
+#    importfits('ForLinearCombination/dirty_combined_psf.fits',
+#               'ForLinearCombination/dirty_combined_psf.image',
+#               overwrite=True)
+#
+#    for method in ("clark", "hogbom", "multiscale", "mem"):
+#        outname = 'ForLinearCombination/deconvolved_combined_image_{0}.model'.format(method)
+#        os.system('rm -rf {0}'.format(outname))
+#        deconvolve(imagename='ForLinearCombination/dirty_combined_image.image',
+#                   model=outname,
+#                   alg=method,
+#                   psf='ForLinearCombination/dirty_combined_psf.image',
+#                   niter=1000,
+#                   threshold='50mJy',
+#                  )
+#        exportfits(outname,
+#                   outname+".fits",
+#                   dropdeg=True,
+#                   overwrite=True)
+#        conv = convolve_fft(fits.getdata(outname+".fits").squeeze(), interferometer_kernel)
+#        hduL = fits.open(outname+".fits")
+#        hduL[0].data = conv.value
+#        hduL.writeto(outname.replace(".model",".image")+".fits", clobber=True)
+#

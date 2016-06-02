@@ -12,4 +12,6 @@ from ._astropy_init import *
 
 # For egg_info test builds to pass, put package imports here.
 if not _ASTROPY_SETUP_:
-    from uvcombine import *
+    from .uvcombine import (feather_plot, feather_simple, spectral_regrid,
+                            spectral_smooth_and_downsample,
+                            fourier_combine_cubes)
