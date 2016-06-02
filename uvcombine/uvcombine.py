@@ -132,8 +132,11 @@ def regrid(hd1, im1, im2raw, hd2):
     #im2 = hdu2.data.squeeze()
     im2, coverage = reproject_interp(hdu2, hd1)
 
+    # return hdu contains the im2 data, reprojected, with the im1 header
+    rhdu = fits.PrimaryHDU(data=im2, header=hd1)
+
     # return variables
-    return hdu2, im2, nax1, nax2, pixscale
+    return rhdu, im2, nax1, nax2, pixscale
 
 
 
@@ -573,7 +576,7 @@ def AKB_combine(hires, lores,
 #interpol_hdu = AKB_interpol("Dragon.im350.crop.fits", "Dragon.im350.crop.fits", "faint_final.shift.fix.fits")
 #f = AKB_combine("faint_final.shift.fix.fits",interpol_hdu, lowresscalefactor=0.0015,return_hdu=True)
 
-def simple_deconvolve_sdim(hdu, lowresfwhm):
+def simple_deconvolve_sdim(hdu, lowresfwhm, minval=1e-1):
     """
     Perform a very simple fourier-space deconvolution of single-dish data.
     i.e., divide the fourier transform of the single-dish data by the fourier
@@ -586,10 +589,28 @@ def simple_deconvolve_sdim(hdu, lowresfwhm):
     pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_low))**0.5
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_lowraw)))
-    decfft_lo = fft_lo / np.abs(kfft)
+    fft_lo = (np.fft.fft2(np.nan_to_num(im_lowraw)))
+    decfft_lo = fft_lo.copy()
+    decfft_lo[kfft > minval] = (fft_lo / kfft)[kfft > minval]
     dec_lo = np.fft.ifft2(decfft_lo)
     return dec_lo
+
+def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
+    """
+    Like simple_deconvolve_sdim, try unsharp masking by convolving
+    with (1-kfft) in the fourier domain
+    """
+    hdu_high, im_highraw, header_high = file_in(hdu)
+    nax2,nax1 = im_highraw.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_high))**0.5
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
+    fft_hi = (np.fft.fft2(np.nan_to_num(im_highraw)))
+    #umaskfft_hi = fft_hi.copy()
+    #umaskfft_hi[ikfft < minval] = (fft_hi * ikfft)[ikfft < minval]
+    umaskfft_hi = fft_hi * ikfft
+    umask_hi = np.fft.ifft2(umaskfft_hi)
+    return umask_hi
 
 
 
