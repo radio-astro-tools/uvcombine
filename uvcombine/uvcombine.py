@@ -213,6 +213,12 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
        An image array containing the weighting for the high resolution image
        (simply 1-kfft)
     """
+    # note for Baobab:
+    # pixel indices 1 and -1 correspond to a sine with period equal to the full
+    # image size
+    # pixel index 0 corresponds to the zero-spacing, i.e. the mean of the image
+
+
     # Construct arrays which hold the x and y coordinates (in unit of pixels)
     # of the image
     ygrid,xgrid = (np.indices([nax2,nax1]) -
@@ -228,6 +234,8 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     #sigma_fftspace = (2*np.pi*sigma)**-1
     #log.debug('sigma = {0}, sigma_fftspace={1}'.format(sigma, sigma_fftspace))
 
+    # technically, the fftshift here does nothing since we're using the
+    # absolute value of the kernel below, so the phase is irrelevant
     kernel = np.fft.fftshift(np.exp(-(xgrid**2+ygrid**2)/(2*sigma**2)))
     # convert the kernel, which is just a gaussian in image space,
     # to its corresponding kernel in fourier space
@@ -240,8 +248,8 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
 
 
-def fftmerge(kfft,ikfft,im_hi,im_lo, highpassfilterSD=False, replace_hires=False,
-             deconvSD=False, min_beam_fraction=0.1):
+def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
+             replace_hires=False, deconvSD=False, min_beam_fraction=0.1):
     """
     Combine images in the fourier domain, and then output the combined image
     both in fourier domain and the image domain.
