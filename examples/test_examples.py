@@ -62,6 +62,13 @@ pl.colorbar()
 pl.title("Single Dish (smoothed) pl=1.5 image")
 pl.savefig("singledish_image_pl1.5.png")
 
+singledish_kernel = convolution.Gaussian2DKernel(40/2.35, x_size=256, y_size=256)
+singledish_kernel_fft = np.fft.fft2(singledish_kernel)
+
+pl.clf()
+pl.imshow(np.fft.fftshift(np.abs(singledish_kernel_fft)), cmap='hot')
+pl.title("Single Dish UV coverage map")
+pl.savefig("singledish_uvcoverage.png")
 
 
 
@@ -81,7 +88,7 @@ kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 im_hi = im_interferometered.real
 im_low = singledish_im
 lowresscalefactor=1
-replace_hires=False
+replace_hires = False
 highpassfilterSD = False
 deconvSD = False
 highresscalefactor=1
