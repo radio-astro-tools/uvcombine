@@ -71,7 +71,6 @@ pl.title("Single Dish UV coverage map")
 pl.savefig("singledish_uvcoverage.png")
 
 
-
 # pixel scale can be interpreted as "arcseconds"
 # then, fwhm=40 means a beam fwhm of 40"
 pixscale = 1
