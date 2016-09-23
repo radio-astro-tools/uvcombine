@@ -34,6 +34,7 @@ pl.title("Deconvolved (Fourier division) pl=1.5 image")
 pl.savefig("fourierdivisiondeconvolve_singledish_image_pl1.5.png")
 
 
+# we have to normalize the image & kernel to use skimage tools
 sd_min = singledish_im.min()
 sd_range = (singledish_im.max() - sd_min)
 singledish_scaled = (singledish_im - sd_min) / sd_range
