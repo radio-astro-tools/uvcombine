@@ -13,10 +13,13 @@ np.random.seed(0)
 im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
 
 # for each step, we'll save a figure
-pl.clf()
+pl.figure(1, figsize=(16,8)).clf()
+pl.subplot(1,2,1)
 pl.imshow(im, cmap='viridis')
 pl.colorbar()
-pl.title("Input image powerlaw=1.5")
+pl.subplot(1,2,2)
+pl.hist(im.ravel(), bins=50)
+pl.suptitle("Input image powerlaw=1.5")
 pl.savefig("inputimage_pl1.5.png")
 
 ygrid, xgrid = np.indices(im.shape, dtype='float')
@@ -44,9 +47,12 @@ imfft_interferometered = imfft * np.fft.fftshift(ring)
 im_interferometered = np.fft.ifft2(imfft_interferometered)
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(im_interferometered.real, cmap='viridis')
 pl.colorbar()
-pl.title("Interferometrically Observed pl=1.5 image")
+pl.suptitle("Interferometrically Observed pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist(im_interferometered.real.ravel(), bins=50)
 pl.savefig("interf_image_pl1.5.png")
 
 # create the single-dish map by convolving the image with a FWHM=40" kernel
@@ -57,9 +63,12 @@ singledish_im = convolution.convolve_fft(im,
                                          boundary='fill', fill_value=im.mean())
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(singledish_im, cmap='viridis')
 pl.colorbar()
-pl.title("Single Dish (smoothed) pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist(singledish_im.ravel(), bins=50)
+pl.suptitle("Single Dish (smoothed) pl=1.5 image")
 pl.savefig("singledish_image_pl1.5.png")
 
 singledish_kernel = convolution.Gaussian2DKernel(40/2.35, x_size=256, y_size=256)
@@ -100,13 +109,19 @@ fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
 
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(combo.real, cmap='viridis')
 pl.colorbar()
-pl.title("Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.suptitle("Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist(combo.real.ravel(), bins=50)
 pl.savefig("feathered_image_pl1.5.png")
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(im-combo.real, cmap='viridis')
 pl.colorbar()
-pl.title("Residual Input-Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.suptitle("Residual Input-Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist((im-combo.real).ravel(), bins=50)
 pl.savefig("residual_feathered_image_pl1.5.png")
