@@ -880,7 +880,15 @@ def feather_plot(hires, lores,
                  1.1*max([np.nanmax(azavg_lo_scaled), np.nanmax(azavg_hi_scaled)]),
                 )
 
-    return rad, rad_as, azavg_kernel, azavg_ikernel, azavg_lo, azavg_hi, azavg_lo_scaled, azavg_hi_scaled
+    return {'radius':rad,
+            'radius_as': rad_as,
+            'azimuthally_averaged_kernel': azavg_kernel,
+            'azimuthally_averaged_inverse_kernel': azavg_ikernel,
+            'azimuthally_averaged_low_resolution': azavg_lo,
+            'azimuthally_averaged_high_resolution': azavg_hi,
+            'azimuthally_averaged_low_res_filtered': azavg_lo_scaled,
+            'azimuthally_averaged_high_res_filtered': azavg_hi_scaled,
+           }
 
 def spectral_regrid(cube, outgrid):
     """
@@ -934,6 +942,7 @@ def spectral_regrid(cube, outgrid):
 
     yy,xx = np.indices(cube.shape[1:])
 
+    log.info("Regridding images.")
     pb = ProgressBar(xx.size)
     for ix, iy in (zip(xx.flat, yy.flat)):
         newcube[:,iy,ix] = np.interp(outgrid.value, inaxis.value,
