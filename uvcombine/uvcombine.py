@@ -1164,13 +1164,22 @@ def feather_compare(hires, lores,
     import pylab as pl
     pl.clf()
     pl.suptitle("{0} - {1}".format(SAS,LAS))
-    pl.subplot(1,2,1)
+    pl.subplot(2,2,1)
     pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
     mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
     pl.plot(mm, mm, 'k--')
     pl.xlabel("High-resolution")
     pl.ylabel("Low-resolution")
-    pl.subplot(1,2,2)
+    pl.subplot(2,2,2)
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
-    pl.hist(ratio[np.isfinite(ratio)])
+    pl.hist(ratio[np.isfinite(ratio)], bins=30)
     pl.xlabel("High-resolution / Low-resolution")
+    pl.subplot(2,1,2)
+    pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_hi), 'r,', alpha=0.5, label='High-res')
+    pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_lo_deconvolved), 'b,', alpha=0.5, label='Lo-res')
+    ylim = pl.gca().get_ylim()
+    pl.vlines([SAS.to(u.arcsec).value,LAS.to(u.arcsec).value],
+              ylim[0], ylim[1], linestyle='-', color='k')
+    #pl.legend(loc='best')
+
+
