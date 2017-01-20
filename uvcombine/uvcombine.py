@@ -240,6 +240,10 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     # convert the kernel, which is just a gaussian in image space,
     # to its corresponding kernel in fourier space
     kfft = np.abs(np.fft.fft2(kernel)) # should be mostly real
+
+    if np.any(np.isnan(kfft)):
+        raise ValueError("NaN value encountered in kernel")
+
     # normalize the kernel
     kfft/=kfft.max()
     ikfft = 1-kfft
@@ -1223,3 +1227,87 @@ def feather_compare(hires, lores,
             'median_sc': sclip[1],
             'std_sc': sclip[2],
            }
+
+def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
+                                   beam_divide_lores=True,
+                                   highpassfilterSD=False,
+                                   min_beam_fraction=0.1,
+                                   plot_min_beam_fraction=1e-3, doplot=True,):
+    """
+    Compare the single-dish and interferometer data over the region where they
+    should agree, but do the comparison in image space!
+
+    Parameters
+    ----------
+    highresfitsfile : str
+        The high-resolution FITS file
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    SAS : `astropy.units.Quantity`
+        The smallest angular scale to plot
+    LAS : `astropy.units.Quantity`
+        The largest angular scale to plot (probably the LAS of the high
+        resolution data)
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+    beam_divide_lores: bool
+        Divide the low-resolution data by the beam weight before plotting?
+        (should do this: otherwise, you are plotting beam-downweighted data)
+    min_beam_fraction : float
+        The minimum fraction of the beam to include; values below this fraction
+        will be discarded when deconvolving
+    plot_min_beam_fraction : float
+        Like min_beam_fraction, but used only for plotting
+    doplot : bool
+        If true, make plots.  Otherwise will just return the results.
+
+    Returns
+    -------
+    scalefactor : float
+        The mean ratio of the high- to the low-resolution image over the range
+        of shared angular sensitivity weighted by the low-resolution image
+        intensity over that range.  The weighting is necessary to avoid errors
+        introduced by the fact that these images are forced to have zero means.
+    """
+    assert LAS > SAS
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
+                                                   im_lowraw, header_low)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    kfft = np.fft.fftshift(kfft)
+    ikfft = np.fft.fftshift(ikfft)
+
+    yy,xx = np.indices([nax2, nax1])
+    rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
+    angscales = nax1/rr * pixscale*u.deg
+
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    if beam_divide_lores:
+        fft_lo_deconvolved = fft_lo / kfft
+    else:
+        fft_lo_deconvolved = fft_lo
+
+    below_beamscale = kfft < min_beam_fraction
+    below_beamscale_plotting = kfft < plot_min_beam_fraction
+    fft_lo_deconvolved[below_beamscale_plotting] = np.nan
+
+    mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
+    assert mask.sum() > 0
+
+    hi_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_hi*mask)))
+    lo_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_lo*mask)))
+    lo_img_ring_deconv = (np.fft.ifft2(np.fft.fftshift(np.nan_to_num(fft_lo_deconvolved*mask))))
+
+    lo_img = lo_img_ring_deconv if beam_divide_lores else lo_img_ring
+
+    ratio = (hi_img_ring.real).ravel() / (lo_img.real).ravel()
+    sd_weighted_mean_ratio = (((lo_img.real.ravel())**2 * ratio).sum() /
+                              ((lo_img.real.ravel())**2).sum())
+
+    return sd_weighted_mean_ratio
