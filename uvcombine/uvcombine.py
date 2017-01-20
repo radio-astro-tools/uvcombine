@@ -1110,6 +1110,7 @@ def feather_compare(hires, lores,
                     beam_divide_lores=True,
                     highpassfilterSD=False,
                     min_beam_fraction=0.1,
+                    plot_min_beam_fraction=1e-3,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1136,6 +1137,8 @@ def feather_compare(hires, lores,
     min_beam_fraction : float
         The minimum fraction of the beam to include; values below this fraction
         will be discarded when deconvolving
+    plot_min_beam_fraction : float
+        Like min_beam_fraction, but used only for plotting
 
     """
     assert LAS > SAS
@@ -1159,10 +1162,16 @@ def feather_compare(hires, lores,
         fft_lo_deconvolved = fft_lo / kfft
     else:
         fft_lo_deconvolved = fft_lo
-    fft_lo_deconvolved[kfft < min_beam_fraction] = np.nan
+
+    below_beamscale = kfft < min_beam_fraction
+    below_beamscale_plotting = kfft < plot_min_beam_fraction
+    fft_lo_deconvolved[below_beamscale] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS)
     assert mask.sum() > 0
+
+    ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
+    sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
 
     import pylab as pl
     pl.clf()
@@ -1171,13 +1180,18 @@ def feather_compare(hires, lores,
     pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
     mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
     pl.plot(mm, mm, 'k--')
+    pl.plot(mm, mm/sclip[1], 'k:')
     pl.xlabel("High-resolution")
     pl.ylabel("Low-resolution")
     pl.subplot(2,2,2)
-    ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
+
     pl.hist(ratio[np.isfinite(ratio)], bins=30)
     pl.xlabel("High-resolution / Low-resolution")
     pl.subplot(2,1,2)
+    srt = np.argsort(angscales.to(u.arcsec).value[~below_beamscale_plotting])
+    pl.plot(angscales.to(u.arcsec).value[~below_beamscale_plotting][srt],
+            np.nanmax(np.abs(fft_lo_deconvolved))*kfft.real[~below_beamscale_plotting][srt],
+            'k-', zorder=-5)
     pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_hi), 'r,', alpha=0.5, label='High-res')
     pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_lo_deconvolved), 'b,', alpha=0.5, label='Lo-res')
     ylim = pl.gca().get_ylim()
@@ -1185,7 +1199,6 @@ def feather_compare(hires, lores,
               ylim[0], ylim[1], linestyle='-', color='k')
     #pl.legend(loc='best')
 
-    sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
     return {'median': np.nanmedian(ratio),
             'mean': np.nanmean(ratio),
             'std': np.nanstd(ratio),
