@@ -20,7 +20,7 @@ import numpy as np
 import FITS_tools
 #from FITS_tools.hcongrid import hcongrid_hdu
 #from FITS_tools.cube_regrid import regrid_cube_hdu
-from astropy import wcs
+from astropy import wcs,stats
 
 def file_in(filename, extnum=0):
     """
@@ -1155,7 +1155,10 @@ def feather_compare(hires, lores,
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
     fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
-    fft_lo_deconvolved = fft_lo / kfft
+    if beam_divide_lores:
+        fft_lo_deconvolved = fft_lo / kfft
+    else:
+        fft_lo_deconvolved = fft_lo
     fft_lo_deconvolved[kfft < min_beam_fraction] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS)
@@ -1182,4 +1185,11 @@ def feather_compare(hires, lores,
               ylim[0], ylim[1], linestyle='-', color='k')
     #pl.legend(loc='best')
 
-
+    sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
+    return {'median': np.nanmedian(ratio),
+            'mean': np.nanmean(ratio),
+            'std': np.nanstd(ratio),
+            'mean_sc': sclip[0],
+            'median_sc': sclip[1],
+            'std_sc': sclip[2],
+           }
