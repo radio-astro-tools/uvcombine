@@ -288,6 +288,12 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
     if replace_hires:
+        if replace_hires is True:
+            raise ValueError("If you are specifying replace_hires, "
+                             "you must give a floating point value "
+                             "corresponding to the beam-fraction of the "
+                             "single-dish image below which the "
+                             "high-resolution data will be used.")
         fftsum = fft_lo.copy()
 
         # mask where the hires data is above a threshold
@@ -1146,8 +1152,8 @@ def feather_compare(hires, lores,
     Returns
     -------
     stats : dict
-        Statistics on the ratio of the low-resolution FFT data to the
-        high-resolution FFT data over the range SAS < x < LAS.  Sigma-clipped
+        Statistics on the ratio of the high-resolution FFT data to the
+        low-resolution FFT data over the range SAS < x < LAS.  Sigma-clipped
         stats are included.
 
     """
