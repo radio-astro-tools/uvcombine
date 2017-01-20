@@ -1111,6 +1111,7 @@ def feather_compare(hires, lores,
                     highpassfilterSD=False,
                     min_beam_fraction=0.1,
                     plot_min_beam_fraction=1e-3,
+                    doplot=True,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1139,6 +1140,15 @@ def feather_compare(hires, lores,
         will be discarded when deconvolving
     plot_min_beam_fraction : float
         Like min_beam_fraction, but used only for plotting
+    doplot : bool
+        If true, make plots.  Otherwise will just return the results.
+
+    Returns
+    -------
+    stats : dict
+        Statistics on the ratio of the low-resolution FFT data to the
+        high-resolution FFT data over the range SAS < x < LAS.  Sigma-clipped
+        stats are included.
 
     """
     assert LAS > SAS
@@ -1165,39 +1175,40 @@ def feather_compare(hires, lores,
 
     below_beamscale = kfft < min_beam_fraction
     below_beamscale_plotting = kfft < plot_min_beam_fraction
-    fft_lo_deconvolved[below_beamscale] = np.nan
+    fft_lo_deconvolved[below_beamscale_plotting] = np.nan
 
-    mask = (angscales > SAS) & (angscales < LAS)
+    mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
     assert mask.sum() > 0
 
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
     sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
 
-    import pylab as pl
-    pl.clf()
-    pl.suptitle("{0} - {1}".format(SAS,LAS))
-    pl.subplot(2,2,1)
-    pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
-    mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
-    pl.plot(mm, mm, 'k--')
-    pl.plot(mm, mm/sclip[1], 'k:')
-    pl.xlabel("High-resolution")
-    pl.ylabel("Low-resolution")
-    pl.subplot(2,2,2)
+    if doplot:
+        import pylab as pl
+        pl.clf()
+        pl.suptitle("{0} - {1}".format(SAS,LAS))
+        pl.subplot(2,2,1)
+        pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
+        mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
+        pl.plot(mm, mm, 'k--')
+        pl.plot(mm, mm/sclip[1], 'k:')
+        pl.xlabel("High-resolution")
+        pl.ylabel("Low-resolution")
+        pl.subplot(2,2,2)
 
-    pl.hist(ratio[np.isfinite(ratio)], bins=30)
-    pl.xlabel("High-resolution / Low-resolution")
-    pl.subplot(2,1,2)
-    srt = np.argsort(angscales.to(u.arcsec).value[~below_beamscale_plotting])
-    pl.plot(angscales.to(u.arcsec).value[~below_beamscale_plotting][srt],
-            np.nanmax(np.abs(fft_lo_deconvolved))*kfft.real[~below_beamscale_plotting][srt],
-            'k-', zorder=-5)
-    pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_hi), 'r,', alpha=0.5, label='High-res')
-    pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_lo_deconvolved), 'b,', alpha=0.5, label='Lo-res')
-    ylim = pl.gca().get_ylim()
-    pl.vlines([SAS.to(u.arcsec).value,LAS.to(u.arcsec).value],
-              ylim[0], ylim[1], linestyle='-', color='k')
-    #pl.legend(loc='best')
+        pl.hist(ratio[np.isfinite(ratio)], bins=30)
+        pl.xlabel("High-resolution / Low-resolution")
+        pl.subplot(2,1,2)
+        srt = np.argsort(angscales.to(u.arcsec).value[~below_beamscale_plotting])
+        pl.plot(angscales.to(u.arcsec).value[~below_beamscale_plotting][srt],
+                np.nanmax(np.abs(fft_lo_deconvolved))*kfft.real[~below_beamscale_plotting][srt],
+                'k-', zorder=-5)
+        pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_hi), 'r,', alpha=0.5, label='High-res')
+        pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_lo_deconvolved), 'b,', alpha=0.5, label='Lo-res')
+        ylim = pl.gca().get_ylim()
+        pl.vlines([SAS.to(u.arcsec).value,LAS.to(u.arcsec).value],
+                  ylim[0], ylim[1], linestyle='-', color='k')
+        #pl.legend(loc='best')
 
     return {'median': np.nanmedian(ratio),
             'mean': np.nanmean(ratio),
