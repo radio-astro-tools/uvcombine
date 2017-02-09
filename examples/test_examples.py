@@ -1,8 +1,14 @@
-import image_registration
+
+# import image_registration
 from astropy import convolution
+from astropy.io import fits
+import astropy.unitsd as u
 import numpy as np
-import pylab as pl
+# import pylab as pl
+import matplotlib.pyplot as pl
+import scipy.ndimage as nd
 from uvcombine.uvcombine import feather_kernel, fftmerge
+from uvcombine.feather_plot import feather_plot
 
 
 # create an input image with specified parameters
@@ -10,14 +16,35 @@ from uvcombine.uvcombine import feather_kernel, fftmerge
 # different power laws, different types of input...)
 # We're assuming a scale of 1"/pixel for this example
 np.random.seed(0)
-im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
+
+
+def make_plaw_img(ny=256, nx=256, pow=1.5, scale=3):
+
+    yy, xx = np.indices((ny, nx))
+    r = ((yy - ny // 2)**2 + (xx - nx // 2)**2)**0.5
+    r[ny // 2, nx // 2] = 1
+    phase = np.random.rand(ny, nx) * 2 * np.pi
+
+    ky, kx = np.meshgrid(np.fft.fftfreq(ny), np.fft.fftfreq(nx))
+    kr = (ky**2 + kx**2)
+    kr[kr == 0] = np.min(kr[kr > 0])
+    Amp = (kr)**(pow)
+    fftarray = Amp * np.cos(phase) + np.complex(0, 1) * Amp * np.sin(phase)
+    array = np.real(np.fft.ifft2(fftarray))
+
+    return array
+
+
+# im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
+im = make_plaw_img()
 
 # for each step, we'll save a figure
 pl.clf()
 pl.imshow(im, cmap='viridis')
 pl.colorbar()
 pl.title("Input image powerlaw=1.5")
-pl.savefig("inputimage_pl1.5.png")
+# pl.savefig("inputimage_pl1.5.png")
+pl.show()
 
 ygrid, xgrid = np.indices(im.shape, dtype='float')
 rr = ((xgrid-im.shape[1]/2)**2+(ygrid-im.shape[0]/2)**2)**0.5
@@ -30,12 +57,13 @@ rr = ((xgrid-im.shape[1]/2)**2+(ygrid-im.shape[0]/2)**2)**0.5
 # r=128 is the smallest angular scale, which is 2" (nyquist sampling....?)
 # That would make r=8 -> 32"...
 # I'm not sure that is right, I have to come back to it.
-ring = (rr>=8) & (rr<=(256/3.))
+ring = (rr >= 8) & (rr <= (256 / 3.))
 
 pl.clf()
 pl.imshow(ring)
 pl.title("UV Coverage Ring")
-pl.savefig("uvcoverage_ring.png")
+# pl.savefig("uvcoverage_ring.png")
+pl.show()
 
 # create the interferometric map by removing both large and small angular
 # scales in fourier space
@@ -47,29 +75,29 @@ pl.clf()
 pl.imshow(im_interferometered.real, cmap='viridis')
 pl.colorbar()
 pl.title("Interferometrically Observed pl=1.5 image")
-pl.savefig("interf_image_pl1.5.png")
+# pl.savefig("interf_image_pl1.5.png")
+pl.show()
 
 # create the single-dish map by convolving the image with a FWHM=40" kernel
 # (this interpretation is much easier than the sharp-edged stuff in fourier
 # space because the kernel is created in real space)
-singledish_im = convolution.convolve_fft(im,
-                                         convolution.Gaussian2DKernel(40/2.35),
-                                         boundary='fill', fill_value=im.mean())
+singledish_im = \
+    convolution.convolve_fft(im,
+                             convolution.Gaussian2DKernel(40 / 2.35),
+                             boundary='fill', fill_value=im.mean())
 
 pl.clf()
 pl.imshow(singledish_im, cmap='viridis')
 pl.colorbar()
 pl.title("Single Dish (smoothed) pl=1.5 image")
-pl.savefig("singledish_image_pl1.5.png")
-
-
-
+# pl.savefig("singledish_image_pl1.5.png")
+pl.show()
 
 # pixel scale can be interpreted as "arcseconds"
 # then, fwhm=40 means a beam fwhm of 40"
 pixscale = 1
 lowresfwhm = 40
-nax1,nax2 = im.shape
+nax1, nax2 = im.shape
 kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
 
@@ -97,10 +125,36 @@ pl.clf()
 pl.imshow(combo.real, cmap='viridis')
 pl.colorbar()
 pl.title("Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
-pl.savefig("feathered_image_pl1.5.png")
+# pl.savefig("feathered_image_pl1.5.png")
+pl.show()
 
 pl.clf()
 pl.imshow(im-combo.real, cmap='viridis')
 pl.colorbar()
 pl.title("Residual Input-Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
-pl.savefig("residual_feathered_image_pl1.5.png")
+# pl.savefig("residual_feathered_image_pl1.5.png")
+pl.show()
+
+
+# Add in a feather plot.
+from uvcombine.feather_plot import feather_plot
+
+hdu_hi = fits.PrimaryHDU(nd.zoom(im, 4), header=fits.Header())
+
+hdu_lo = fits.PrimaryHDU(singledish_im, header=fits.Header())
+
+hdu_hi.header["CTYPE1"] = "RA"
+hdu_hi.header["CTYPE2"] = "DEC"
+hdu_hi.header["CDELT1"] = 0.025
+hdu_hi.header["CDELT2"] = 0.025
+hdu_hi.header["CRVAL1"] = 0.0
+hdu_hi.header["CRVAL2"] = 0.0
+
+hdu_lo.header["CTYPE1"] = "RA"
+hdu_lo.header["CTYPE2"] = "DEC"
+hdu_lo.header["CDELT1"] = 0.1
+hdu_lo.header["CDELT2"] = 0.1
+hdu_lo.header["CRVAL1"] = 0.0
+hdu_lo.header["CRVAL2"] = 0.0
+
+feather_plot(hdu_hi, hdu_lo, lowresfwhm=2.0 * u.deg)

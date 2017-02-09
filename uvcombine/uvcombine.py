@@ -26,7 +26,7 @@ def file_in(filename, extnum=0):
     """
     Take the input files. If input is already HDU, then return it.
     If input is a .fits filename, then read the .fits file.
-   
+
     Return
     ----------
     hdu :  obj
@@ -35,7 +35,7 @@ def file_in(filename, extnum=0):
        The image array
     header : header object
        The header of the input .fits file
-   
+
     Parameters
     ----------
     filename : str
@@ -47,7 +47,7 @@ def file_in(filename, extnum=0):
         hdu = filename
     else:
         hdu = fits.open(filename)[extnum]
-   
+
     im = hdu.data.squeeze()
     #header = FITS_tools.strip_headers.flatten_header(hdu.header)
     header = wcs_utils.strip_wcs_from_header(hdu.header)
@@ -56,7 +56,7 @@ def file_in(filename, extnum=0):
     header['NAXIS'] = im.ndim
     for ii,dim in enumerate(im.shape):
         header['NAXIS{0}'.format(im.ndim-ii)] = dim
-   
+
     return hdu, im, header
 
 
@@ -969,7 +969,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
 
     kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
-    
+
     # there may not be an alternative to this anywhere in the astropy ecosystem
     cube_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(cube,
                                                               kernelwidth)
