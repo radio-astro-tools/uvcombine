@@ -21,6 +21,7 @@ import FITS_tools
 #from FITS_tools.hcongrid import hcongrid_hdu
 #from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import wcs,stats
+from astropy.convolution import convolve_fft, Gaussian2DKernel
 
 def file_in(filename, extnum=0):
     """
@@ -1311,3 +1312,30 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
                               ((lo_img.real.ravel())**2).sum())
 
     return sd_weighted_mean_ratio
+
+
+def scale_comparison(original_image, test_image, scales, sm_orig=True):
+    """
+    Compare the 'test_image' to the original image as a function of scale (in
+    pixel units)
+
+    (warning: kinda slow)
+    """
+
+    chi2s = []
+
+    for scale in scales:
+
+        kernel = Gaussian2DKernel(scale)
+
+        sm_img = convolve_fft(test_image, kernel)
+        if sm_orig:
+            sm_orig_img = convolve_fft(original_image, kernel)
+        else:
+            sm_orig_img = original_image
+
+        chi2 = (((sm_img-sm_orig_img)/sm_orig_img)**2).sum()
+
+        chi2s.append(chi2)
+
+    return np.array(chi2s)
