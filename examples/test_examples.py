@@ -5,6 +5,10 @@ import pylab as pl
 from uvcombine.uvcombine import feather_kernel, fftmerge
 
 
+pl.rcParams['image.interpolation'] = 'nearest'
+pl.rcParams['image.origin'] = 'lower'
+
+
 # create an input image with specified parameters
 # (this can later be modified - it will be good to examine the effects of
 # different power laws, different types of input...)
