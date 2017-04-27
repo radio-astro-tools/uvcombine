@@ -117,6 +117,8 @@ def match_flux_units(image, image_header, target_header):
         raise ValueError("Jy/pixel is not an accepted unit to convert into "
                          "since it is dependent on the pixel size.  Try Jy/"
                          "sr instead?")
+    else:
+        target_header_unit = target_unit.to_string('FITS')
 
     # do this as a separate if statement because we may have converted
     # Jy/beam->Jy/sr above
@@ -130,8 +132,6 @@ def match_flux_units(image, image_header, target_header):
         elif image_unit.is_equivalent(u.Jy/u.pixel):
             pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
             image_unit = image_unit.bases[0] / pixel_area
-
-    log.debug("image beam: {0}  target_beam: {1}".format(image_beam, target_beam))
 
     log.info("Converting data from {0} to {1}".format(image_unit, target_unit))
     image = u.Quantity(image, image_unit).to(target_unit, equivalency)
