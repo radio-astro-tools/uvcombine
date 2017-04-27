@@ -61,6 +61,85 @@ def file_in(filename, extnum=0):
     return hdu, im, header
 
 
+def match_flux_units(image, image_header, target_header):
+    """
+    Match the flux units of the input image to the target header
+    """
+
+    if 'BUNIT' not in image_header:
+        raise ValueError("Image header must have a BUNIT specified")
+    if 'BUNIT' not in target_header:
+        raise ValueError("Target header must have a BUNIT specified")
+
+    im_wcs = wcs.WCS(image_header)
+    target_wcs = wcs.WCS(target_header)
+
+    target_unit = u.Unit(target_header['BUNIT'])
+    image_unit = u.Unit(image_header['BUNIT'])
+
+    equivalency = None
+
+    if u.beam in image_unit.bases:
+        image_beam = radio_beam.Beam.from_fits_header(image_header)
+
+    if target_unit.is_equivalent(u.Jy/u.beam):
+        target_beam = radio_beam.Beam.from_fits_header(target_header)
+        bases = target_unit.bases
+        bases.remove(u.beam)
+
+        target_unit = bases[0] / target_beam.sr
+        log.debug("Target_unit = {0}".format(target_unit))
+        target_header_unit = 'Jy/beam'
+
+        # Updated header: converting the input image to target image units
+        image_header.update(target_beam.to_header_keywords())
+
+    elif target_unit.is_equivalent(u.K):
+        cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
+        cfreq_target = target_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
+        if cfreq_in != cfreq_target:
+            raise ValueError("To combine images with brightness temperature "
+                             "units, the observed frequency must be specified "
+                             "in the header using CRVAL3, CRPIX3, CDELT3, "
+                             "and CUNIT3, and they must be the same.")
+        if image_unit.is_equivalent(u.K):
+            # no change needed
+            pass
+        elif image_unit.is_equivalent(u.Jy/u.beam):
+            image_unit = image_unit.bases[0]
+            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+        elif image_unit.is_equivalent(u.Jy/u.pixel):
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            image_unit = image_unit.bases[0]
+            equivalency = u.brightness_temperature(pixel_area, cfreq_in,)
+        target_header_unit = 'K'
+    elif target_unit.is_equivalent(u.Jy/u.pixel):
+        raise ValueError("Jy/pixel is not an accepted unit to convert into "
+                         "since it is dependent on the pixel size.  Try Jy/"
+                         "sr instead?")
+
+    # do this as a separate if statement because we may have converted
+    # Jy/beam->Jy/sr above
+    if (((hasattr(target_unit, 'unit') and
+          target_unit.unit.is_equivalent(u.Jy/u.sr)) or
+         target_unit.is_equivalent(u.Jy/u.sr))):
+        if image_unit.is_equivalent(u.K):
+            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+        elif image_unit.is_equivalent(u.Jy/u.beam):
+            image_unit = image_unit.bases[0] / image_beam.sr
+        elif image_unit.is_equivalent(u.Jy/u.pixel):
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            image_unit = image_unit.bases[0] / pixel_area
+
+    log.debug("image beam: {0}  target_beam: {1}".format(image_beam, target_beam))
+
+    log.info("Converting data from {0} to {1}".format(image_unit, target_unit))
+    image = u.Quantity(image, image_unit).to(target_unit, equivalency)
+    image_header['BUNIT'] = target_header_unit
+
+    return image, image_header
+
+
 
 def flux_unit(image, header):
     """
@@ -717,6 +796,15 @@ def feather_simple(hires, lores,
     if lowresfwhm is None:
         beam_low = radio_beam.Beam.from_fits_header(header_low)
         lowresfwhm = beam_low.major
+        log.info("Low-res FWHM: {0}".format(lowresfwhm))
+
+    # After this step, the units of im_hi are some sort of surface brightness
+    # unit equivalent to that specified in the high-resolution header's units
+    # Note that this step does NOT preserve the values of im_lowraw and
+    # header_lowraw from above
+    im_lowraw, header_low = match_flux_units(image=im_lowraw,
+                                             image_header=header_low.copy(),
+                                             target_header=header_hi)
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
