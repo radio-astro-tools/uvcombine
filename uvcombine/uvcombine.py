@@ -63,8 +63,31 @@ def file_in(filename, extnum=0):
 
 def match_flux_units(image, image_header, target_header):
     """
-    Match the flux units of the input image to the target header
+    Match the flux units of the input image to the target header.  There are
+    significant restrictions on the allowed units in the image and target
+    headers.
+
+    Parameters
+    ----------
+    image : array
+        An array of flux density or surface brightness units
+    image_header : fits.Header
+        The header associated with the above array
+    target_header : fits.Header
+        The header whose units should be matched
+
+    Returns
+    -------
+    new_image : array
+        The array in the new units
+    new_header : fits.Header
+        The corresponding FITS header that specifies the appropriate units
+        (including the beam area if the appropriate unit is Jy/beam)
     """
+
+    # copy because we're modifying this and we don't want to inplace modify the
+    # object ever
+    image_header = image_header.copy()
 
     if 'BUNIT' not in image_header:
         raise ValueError("Image header must have a BUNIT specified")
