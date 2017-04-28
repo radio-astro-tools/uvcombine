@@ -13,7 +13,8 @@ if __name__ == "__main__":
     input_hdu = utils.generate_test_fits(imsize=512, powerlaw=1.5,
                                          beamfwhm=2*u.arcsec,
                                          pixel_scale=pixel_scale)
-    input_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as.fits",
+    input_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as.fits"
+    input_hdu.writeto(input_fn,
                       overwrite=True)
 
     log.info("make Interferometric image")
@@ -24,8 +25,8 @@ if __name__ == "__main__":
     intf_hdu = fits.PrimaryHDU(data=intf_data,
                                header=input_hdu.header
                               )
-    convert_to_casa(intf_hdu).writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as.fits",
-                                      overwrite=True)
+    intf_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as.fits"
+    convert_to_casa(intf_hdu).writeto(intf_fn, overwrite=True)
 
     log.info("make SD image")
     sd_header = input_hdu.header.copy()
@@ -34,10 +35,13 @@ if __name__ == "__main__":
                                              pixel_scale=pixel_scale,
                                              smallest_angular_scale=33*u.arcsec)
     sd_hdu = fits.PrimaryHDU(data=sd_data, header=sd_header)
-    convert_to_casa(sd_hdu).writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits",
-                                    overwrite=True)
+    sd_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits"
+    convert_to_casa(sd_hdu).writeto(sd_fn, overwrite=True)
 
     log.info("Feather data")
     feathered_hdu = feather_simple(hires=intf_hdu, lores=sd_hdu, return_hdu=True)
-    feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered.fits",
+    feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_MJySr.fits",
+                          overwrite=True)
+    feathered_hdu = feather_simple(hires=intf_fn, lores=sd_fn, return_hdu=True)
+    feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_JyBeam.fits",
                           overwrite=True)

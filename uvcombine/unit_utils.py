@@ -8,7 +8,7 @@ def convert_to_casa(hdu):
     """
     Convert a FITS HDU to casa-compatible units, i.e., Jy/beam
     """
-    hdu = file_in(hdu)[0]
+    hdu = file_in(hdu)[0].copy()
 
     beam = radio_beam.Beam.from_fits_header(hdu.header)
 
@@ -22,5 +22,9 @@ def convert_to_casa(hdu):
     elif u.Unit(hdu.header['BUNIT']).is_equivalent(u.MJy/u.sr):
         hdu.data = u.Quantity(hdu.data,
                               u.Unit(hdu.header['BUNIT'])).to(u.Jy/beam).value
+    elif hdu.header['BUNIT'] != 'Jy/beam':
+        raise ValueError("Header BUNIT not recognized")
+
+    hdu.header['BUNIT'] = 'Jy/beam'
 
     return hdu
