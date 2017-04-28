@@ -1,0 +1,4 @@
+all: input_image_sz512as_pl1.5_fwhm2as_scale1as.fits input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as.fits input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits
+
+%.fits: make_test_cubes.py
+	python make_test_cubes.py
