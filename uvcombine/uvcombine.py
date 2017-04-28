@@ -213,8 +213,8 @@ def regrid(hd1, im1, im2raw, hd2):
     """
 
     # Sanity Checks:
-    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension non-equal to 2.'
-    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension non-equal to 2.'
+    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension != 2.'
+    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension != to 2.'
 
     # read pixel scale from the header of high resolution image
     #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
@@ -829,8 +829,10 @@ def feather_simple(hires, lores,
                                              image_header=header_low.copy(),
                                              target_header=header_hi)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
+                                                   im1=im_hi,
+                                                   im2raw=im_lowraw,
+                                                   hd2=header_low)
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 

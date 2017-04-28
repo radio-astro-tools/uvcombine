@@ -145,7 +145,7 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
     """
 
     FWHM_CONSTANT = (8*np.log(2))**0.5
-    kernel = convolution.Gaussian2DKernel(smallest_angular_scale/FWHM_CONSTANT)
+    kernel = convolution.Gaussian2DKernel(smallest_angular_scale/FWHM_CONSTANT/pixel_scale)
 
     # create the single-dish map by convolving the image with a FWHM=40" kernel
     # (this interpretation is much easier than the sharp-edged stuff in fourier
