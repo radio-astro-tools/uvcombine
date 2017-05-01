@@ -20,7 +20,8 @@ import numpy as np
 import FITS_tools
 #from FITS_tools.hcongrid import hcongrid_hdu
 #from FITS_tools.cube_regrid import regrid_cube_hdu
-from astropy import wcs
+from astropy import wcs,stats
+from astropy.convolution import convolve_fft, Gaussian2DKernel
 
 def file_in(filename, extnum=0):
     """
@@ -58,6 +59,108 @@ def file_in(filename, extnum=0):
         header['NAXIS{0}'.format(im.ndim-ii)] = dim
 
     return hdu, im, header
+
+
+def match_flux_units(image, image_header, target_header):
+    """
+    Match the flux units of the input image to the target header.  There are
+    significant restrictions on the allowed units in the image and target
+    headers.
+
+    Parameters
+    ----------
+    image : array
+        An array of flux density or surface brightness units
+    image_header : fits.Header
+        The header associated with the above array
+    target_header : fits.Header
+        The header whose units should be matched
+
+    Returns
+    -------
+    new_image : array
+        The array in the new units
+    new_header : fits.Header
+        The corresponding FITS header that specifies the appropriate units
+        (including the beam area if the appropriate unit is Jy/beam)
+    """
+
+    # copy because we're modifying this and we don't want to inplace modify the
+    # object ever
+    image_header = image_header.copy()
+
+    if 'BUNIT' not in image_header:
+        raise ValueError("Image header must have a BUNIT specified")
+    if 'BUNIT' not in target_header:
+        raise ValueError("Target header must have a BUNIT specified")
+
+    im_wcs = wcs.WCS(image_header)
+    target_wcs = wcs.WCS(target_header)
+
+    target_unit = u.Unit(target_header['BUNIT'])
+    image_unit = u.Unit(image_header['BUNIT'])
+
+    equivalency = None
+
+    if u.beam in image_unit.bases:
+        image_beam = radio_beam.Beam.from_fits_header(image_header)
+
+    if target_unit.is_equivalent(u.Jy/u.beam):
+        target_beam = radio_beam.Beam.from_fits_header(target_header)
+        bases = target_unit.bases
+        bases.remove(u.beam)
+
+        target_unit = bases[0] / target_beam.sr
+        log.debug("Target_unit = {0}".format(target_unit))
+        target_header_unit = 'Jy/beam'
+
+        # Updated header: converting the input image to target image units
+        image_header.update(target_beam.to_header_keywords())
+
+    elif target_unit.is_equivalent(u.K):
+        cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
+        cfreq_target = target_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
+        if cfreq_in != cfreq_target:
+            raise ValueError("To combine images with brightness temperature "
+                             "units, the observed frequency must be specified "
+                             "in the header using CRVAL3, CRPIX3, CDELT3, "
+                             "and CUNIT3, and they must be the same.")
+        if image_unit.is_equivalent(u.K):
+            # no change needed
+            pass
+        elif image_unit.is_equivalent(u.Jy/u.beam):
+            image_unit = image_unit.bases[0]
+            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+        elif image_unit.is_equivalent(u.Jy/u.pixel):
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            image_unit = image_unit.bases[0]
+            equivalency = u.brightness_temperature(pixel_area, cfreq_in,)
+        target_header_unit = 'K'
+    elif target_unit.is_equivalent(u.Jy/u.pixel):
+        raise ValueError("Jy/pixel is not an accepted unit to convert into "
+                         "since it is dependent on the pixel size.  Try Jy/"
+                         "sr instead?")
+    else:
+        target_header_unit = target_unit.to_string('FITS')
+
+    # do this as a separate if statement because we may have converted
+    # Jy/beam->Jy/sr above
+    if (((hasattr(target_unit, 'unit') and
+          target_unit.unit.is_equivalent(u.Jy/u.sr)) or
+         target_unit.is_equivalent(u.Jy/u.sr))):
+        if image_unit.is_equivalent(u.K):
+            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+        elif image_unit.is_equivalent(u.Jy/u.beam):
+            image_unit = image_unit.bases[0] / image_beam.sr
+        elif image_unit.is_equivalent(u.Jy/u.pixel):
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            image_unit = image_unit.bases[0] / pixel_area
+
+    log.info("Converting data from {0} to {1}".format(image_unit, target_unit))
+    image = u.Quantity(image, image_unit).to(target_unit, equivalency)
+    image_header['BUNIT'] = target_header_unit
+
+    return image, image_header
 
 
 
@@ -110,8 +213,8 @@ def regrid(hd1, im1, im2raw, hd2):
     """
 
     # Sanity Checks:
-    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension non-equal to 2.'
-    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension non-equal to 2.'
+    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension != 2.'
+    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension != to 2.'
 
     # read pixel scale from the header of high resolution image
     #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
@@ -240,6 +343,10 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     # convert the kernel, which is just a gaussian in image space,
     # to its corresponding kernel in fourier space
     kfft = np.abs(np.fft.fft2(kernel)) # should be mostly real
+
+    if np.any(np.isnan(kfft)):
+        raise ValueError("NaN value encountered in kernel")
+
     # normalize the kernel
     kfft/=kfft.max()
     ikfft = 1-kfft
@@ -266,8 +373,11 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
         convolved with the lowresfwhm beam.
     replace_hires: Quantity or False
         If set, will simply replace the fourier transform of the single-dish
-        data with the fourier transform of the interferometric data above
-        the specified kernel level.  Overrides other parameters.
+        data with the fourier transform of the interferometric data above the
+        specified kernel level.  Can be used in conjunction with either
+        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        threshold value; this threshold will be applied to the single-dish
+        kernel.
     deconvSD: bool
         Deconvolve the single-dish data before adding in fourier space?
         This "deconvolution" is a simple division of the fourier transform
@@ -287,24 +397,30 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
     fft_hi = np.fft.fft2(np.nan_to_num(im_hi))
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
+    # Combine and inverse fourier transform the images
+    if highpassfilterSD:
+        lo_conv = kfft*fft_lo
+    elif deconvSD:
+        lo_conv = fft_lo / kfft
+        lo_conv[kfft < min_beam_fraction] = 0
+    else:
+        lo_conv = fft_lo
+
+
     if replace_hires:
-        fftsum = fft_lo.copy()
+        if replace_hires is True:
+            raise ValueError("If you are specifying replace_hires, "
+                             "you must give a floating point value "
+                             "corresponding to the beam-fraction of the "
+                             "single-dish image below which the "
+                             "high-resolution data will be used.")
+        fftsum = lo_conv.copy()
 
         # mask where the hires data is above a threshold
         mask = ikfft > replace_hires
 
         fftsum[mask] = fft_hi[mask]
-
     else:
-        # Combine and inverse fourier transform the images
-        if highpassfilterSD:
-            lo_conv = kfft*fft_lo
-        elif deconvSD:
-            lo_conv = fft_lo / kfft
-            lo_conv[kfft < min_beam_fraction] = 0
-        else:
-            lo_conv = fft_lo
-
         fftsum = lo_conv + ikfft*fft_hi
 
     combo = np.fft.ifft2(fftsum)
@@ -681,8 +797,11 @@ def feather_simple(hires, lores,
         for further details about what feather does and how this relates.
     replace_hires: Quantity or False
         If set, will simply replace the fourier transform of the single-dish
-        data with the fourier transform of the interferometric data above
-        the specified kernel level.  Overrides other parameters.
+        data with the fourier transform of the interferometric data above the
+        specified kernel level.  Can be used in conjunction with either
+        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        threshold value; this threshold will be applied to the single-dish
+        kernel.
     deconvSD: bool
         Deconvolve the single-dish data before adding in fourier space?
         This "deconvolution" is a simple division of the fourier transform
@@ -706,9 +825,20 @@ def feather_simple(hires, lores,
     if lowresfwhm is None:
         beam_low = radio_beam.Beam.from_fits_header(header_low)
         lowresfwhm = beam_low.major
+        log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    # After this step, the units of im_hi are some sort of surface brightness
+    # unit equivalent to that specified in the high-resolution header's units
+    # Note that this step does NOT preserve the values of im_lowraw and
+    # header_lowraw from above
+    im_lowraw, header_low = match_flux_units(image=im_lowraw,
+                                             image_header=header_low.copy(),
+                                             target_header=header_hi)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
+                                                   im1=im_hi,
+                                                   im2raw=im_lowraw,
+                                                   hd2=header_low)
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
@@ -880,7 +1010,15 @@ def feather_plot(hires, lores,
                  1.1*max([np.nanmax(azavg_lo_scaled), np.nanmax(azavg_hi_scaled)]),
                 )
 
-    return rad, rad_as, azavg_kernel, azavg_ikernel, azavg_lo, azavg_hi, azavg_lo_scaled, azavg_hi_scaled
+    return {'radius':rad,
+            'radius_as': rad_as,
+            'azimuthally_averaged_kernel': azavg_kernel,
+            'azimuthally_averaged_inverse_kernel': azavg_ikernel,
+            'azimuthally_averaged_low_resolution': azavg_lo,
+            'azimuthally_averaged_high_resolution': azavg_hi,
+            'azimuthally_averaged_low_res_filtered': azavg_lo_scaled,
+            'azimuthally_averaged_high_res_filtered': azavg_hi_scaled,
+           }
 
 def spectral_regrid(cube, outgrid):
     """
@@ -934,6 +1072,7 @@ def spectral_regrid(cube, outgrid):
 
     yy,xx = np.indices(cube.shape[1:])
 
+    log.info("Regridding images.")
     pb = ProgressBar(xx.size)
     for ix, iy in (zip(xx.flat, yy.flat)):
         newcube[:,iy,ix] = np.interp(outgrid.value, inaxis.value,
@@ -1101,6 +1240,8 @@ def feather_compare(hires, lores,
                     beam_divide_lores=True,
                     highpassfilterSD=False,
                     min_beam_fraction=0.1,
+                    plot_min_beam_fraction=1e-3,
+                    doplot=True,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1127,6 +1268,17 @@ def feather_compare(hires, lores,
     min_beam_fraction : float
         The minimum fraction of the beam to include; values below this fraction
         will be discarded when deconvolving
+    plot_min_beam_fraction : float
+        Like min_beam_fraction, but used only for plotting
+    doplot : bool
+        If true, make plots.  Otherwise will just return the results.
+
+    Returns
+    -------
+    stats : dict
+        Statistics on the ratio of the high-resolution FFT data to the
+        low-resolution FFT data over the range SAS < x < LAS.  Sigma-clipped
+        stats are included.
 
     """
     assert LAS > SAS
@@ -1146,22 +1298,163 @@ def feather_compare(hires, lores,
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
     fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
-    fft_lo_deconvolved = fft_lo / kfft
-    fft_lo_deconvolved[kfft < min_beam_fraction] = np.nan
+    if beam_divide_lores:
+        fft_lo_deconvolved = fft_lo / kfft
+    else:
+        fft_lo_deconvolved = fft_lo
 
-    mask = (angscales > SAS) & (angscales < LAS)
+    below_beamscale = kfft < min_beam_fraction
+    below_beamscale_plotting = kfft < plot_min_beam_fraction
+    fft_lo_deconvolved[below_beamscale_plotting] = np.nan
+
+    mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
     assert mask.sum() > 0
 
-    import pylab as pl
-    pl.clf()
-    pl.suptitle("{0} - {1}".format(SAS,LAS))
-    pl.subplot(1,2,1)
-    pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
-    mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
-    pl.plot(mm, mm, 'k--')
-    pl.xlabel("High-resolution")
-    pl.ylabel("Low-resolution")
-    pl.subplot(1,2,2)
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
-    pl.hist(ratio[np.isfinite(ratio)])
-    pl.xlabel("High-resolution / Low-resolution")
+    sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
+
+    if doplot:
+        import pylab as pl
+        pl.clf()
+        pl.suptitle("{0} - {1}".format(SAS,LAS))
+        pl.subplot(2,2,1)
+        pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
+        mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
+        pl.plot(mm, mm, 'k--')
+        pl.plot(mm, mm/sclip[1], 'k:')
+        pl.xlabel("High-resolution")
+        pl.ylabel("Low-resolution")
+        pl.subplot(2,2,2)
+
+        pl.hist(ratio[np.isfinite(ratio)], bins=30)
+        pl.xlabel("High-resolution / Low-resolution")
+        pl.subplot(2,1,2)
+        srt = np.argsort(angscales.to(u.arcsec).value[~below_beamscale_plotting])
+        pl.plot(angscales.to(u.arcsec).value[~below_beamscale_plotting][srt],
+                np.nanmax(np.abs(fft_lo_deconvolved))*kfft.real[~below_beamscale_plotting][srt],
+                'k-', zorder=-5)
+        pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_hi), 'r,', alpha=0.5, label='High-res')
+        pl.loglog(angscales.to(u.arcsec).value, np.abs(fft_lo_deconvolved), 'b,', alpha=0.5, label='Lo-res')
+        ylim = pl.gca().get_ylim()
+        pl.vlines([SAS.to(u.arcsec).value,LAS.to(u.arcsec).value],
+                  ylim[0], ylim[1], linestyle='-', color='k')
+        #pl.legend(loc='best')
+
+    return {'median': np.nanmedian(ratio),
+            'mean': np.nanmean(ratio),
+            'std': np.nanstd(ratio),
+            'mean_sc': sclip[0],
+            'median_sc': sclip[1],
+            'std_sc': sclip[2],
+           }
+
+def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
+                                   beam_divide_lores=True,
+                                   highpassfilterSD=False,
+                                   min_beam_fraction=0.1,
+                                   plot_min_beam_fraction=1e-3, doplot=True,):
+    """
+    Compare the single-dish and interferometer data over the region where they
+    should agree, but do the comparison in image space!
+
+    Parameters
+    ----------
+    highresfitsfile : str
+        The high-resolution FITS file
+    lowresfitsfile : str
+        The low-resolution (single-dish) FITS file
+    SAS : `astropy.units.Quantity`
+        The smallest angular scale to plot
+    LAS : `astropy.units.Quantity`
+        The largest angular scale to plot (probably the LAS of the high
+        resolution data)
+    lowresfwhm : `astropy.units.Quantity`
+        The full-width-half-max of the single-dish (low-resolution) beam;
+        or the scale at which you want to try to match the low/high resolution
+        data
+    beam_divide_lores: bool
+        Divide the low-resolution data by the beam weight before plotting?
+        (should do this: otherwise, you are plotting beam-downweighted data)
+    min_beam_fraction : float
+        The minimum fraction of the beam to include; values below this fraction
+        will be discarded when deconvolving
+    plot_min_beam_fraction : float
+        Like min_beam_fraction, but used only for plotting
+    doplot : bool
+        If true, make plots.  Otherwise will just return the results.
+
+    Returns
+    -------
+    scalefactor : float
+        The mean ratio of the high- to the low-resolution image over the range
+        of shared angular sensitivity weighted by the low-resolution image
+        intensity over that range.  The weighting is necessary to avoid errors
+        introduced by the fact that these images are forced to have zero means.
+    """
+    assert LAS > SAS
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
+                                                   im_lowraw, header_low)
+
+    kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+    kfft = np.fft.fftshift(kfft)
+    ikfft = np.fft.fftshift(ikfft)
+
+    yy,xx = np.indices([nax2, nax1])
+    rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
+    angscales = nax1/rr * pixscale*u.deg
+
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    if beam_divide_lores:
+        fft_lo_deconvolved = fft_lo / kfft
+    else:
+        fft_lo_deconvolved = fft_lo
+
+    below_beamscale = kfft < min_beam_fraction
+    below_beamscale_plotting = kfft < plot_min_beam_fraction
+    fft_lo_deconvolved[below_beamscale_plotting] = np.nan
+
+    mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
+    assert mask.sum() > 0
+
+    hi_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_hi*mask)))
+    lo_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_lo*mask)))
+    lo_img_ring_deconv = (np.fft.ifft2(np.fft.fftshift(np.nan_to_num(fft_lo_deconvolved*mask))))
+
+    lo_img = lo_img_ring_deconv if beam_divide_lores else lo_img_ring
+
+    ratio = (hi_img_ring.real).ravel() / (lo_img.real).ravel()
+    sd_weighted_mean_ratio = (((lo_img.real.ravel())**2 * ratio).sum() /
+                              ((lo_img.real.ravel())**2).sum())
+
+    return sd_weighted_mean_ratio
+
+
+def scale_comparison(original_image, test_image, scales, sm_orig=True):
+    """
+    Compare the 'test_image' to the original image as a function of scale (in
+    pixel units)
+
+    (warning: kinda slow)
+    """
+
+    chi2s = []
+
+    for scale in scales:
+
+        kernel = Gaussian2DKernel(scale)
+
+        sm_img = convolve_fft(test_image, kernel)
+        if sm_orig:
+            sm_orig_img = convolve_fft(original_image, kernel)
+        else:
+            sm_orig_img = original_image
+
+        chi2 = (((sm_img-sm_orig_img)/sm_orig_img)**2).sum()
+
+        chi2s.append(chi2)
+
+    return np.array(chi2s)

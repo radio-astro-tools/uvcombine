@@ -11,6 +11,10 @@ from uvcombine.uvcombine import feather_kernel, fftmerge
 from uvcombine.feather_plot import feather_plot
 
 
+pl.rcParams['image.interpolation'] = 'nearest'
+pl.rcParams['image.origin'] = 'lower'
+
+
 # create an input image with specified parameters
 # (this can later be modified - it will be good to examine the effects of
 # different power laws, different types of input...)
@@ -39,12 +43,14 @@ def make_plaw_img(ny=256, nx=256, pow=1.5, scale=3):
 im = make_plaw_img()
 
 # for each step, we'll save a figure
-pl.clf()
+pl.figure(1, figsize=(16,8)).clf()
+pl.subplot(1,2,1)
 pl.imshow(im, cmap='viridis')
 pl.colorbar()
-pl.title("Input image powerlaw=1.5")
-# pl.savefig("inputimage_pl1.5.png")
-pl.show()
+pl.subplot(1,2,2)
+pl.hist(im.ravel(), bins=50)
+pl.suptitle("Input image powerlaw=1.5")
+pl.savefig("inputimage_pl1.5.png")
 
 ygrid, xgrid = np.indices(im.shape, dtype='float')
 rr = ((xgrid-im.shape[1]/2)**2+(ygrid-im.shape[0]/2)**2)**0.5
@@ -72,11 +78,13 @@ imfft_interferometered = imfft * np.fft.fftshift(ring)
 im_interferometered = np.fft.ifft2(imfft_interferometered)
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(im_interferometered.real, cmap='viridis')
 pl.colorbar()
-pl.title("Interferometrically Observed pl=1.5 image")
-# pl.savefig("interf_image_pl1.5.png")
-pl.show()
+pl.suptitle("Interferometrically Observed pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist(im_interferometered.real.ravel(), bins=50)
+pl.savefig("interf_image_pl1.5.png")
 
 # create the single-dish map by convolving the image with a FWHM=40" kernel
 # (this interpretation is much easier than the sharp-edged stuff in fourier
@@ -87,11 +95,21 @@ singledish_im = \
                              boundary='fill', fill_value=im.mean())
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(singledish_im, cmap='viridis')
 pl.colorbar()
-pl.title("Single Dish (smoothed) pl=1.5 image")
-# pl.savefig("singledish_image_pl1.5.png")
-pl.show()
+pl.subplot(1,2,2)
+pl.hist(singledish_im.ravel(), bins=50)
+pl.suptitle("Single Dish (smoothed) pl=1.5 image")
+pl.savefig("singledish_image_pl1.5.png")
+
+singledish_kernel = convolution.Gaussian2DKernel(40/2.35, x_size=256, y_size=256)
+singledish_kernel_fft = np.fft.fft2(singledish_kernel)
+
+pl.clf()
+pl.imshow(np.fft.fftshift(np.abs(singledish_kernel_fft)), cmap='hot')
+pl.title("Single Dish UV coverage map")
+pl.savefig("singledish_uvcoverage.png")
 
 # pixel scale can be interpreted as "arcseconds"
 # then, fwhm=40 means a beam fwhm of 40"
@@ -109,7 +127,7 @@ kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 im_hi = im_interferometered.real
 im_low = singledish_im
 lowresscalefactor=1
-replace_hires=False
+replace_hires = False
 highpassfilterSD = False
 deconvSD = False
 highresscalefactor=1
@@ -122,39 +140,19 @@ fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
 
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(combo.real, cmap='viridis')
 pl.colorbar()
-pl.title("Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
-# pl.savefig("feathered_image_pl1.5.png")
-pl.show()
+pl.suptitle("Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist(combo.real.ravel(), bins=50)
+pl.savefig("feathered_image_pl1.5.png")
 
 pl.clf()
+pl.subplot(1,2,1)
 pl.imshow(im-combo.real, cmap='viridis')
 pl.colorbar()
-pl.title("Residual Input-Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
-# pl.savefig("residual_feathered_image_pl1.5.png")
-pl.show()
-
-
-# Add in a feather plot.
-from uvcombine.feather_plot import feather_plot
-
-hdu_hi = fits.PrimaryHDU(nd.zoom(im, 4), header=fits.Header())
-
-hdu_lo = fits.PrimaryHDU(singledish_im, header=fits.Header())
-
-hdu_hi.header["CTYPE1"] = "RA"
-hdu_hi.header["CTYPE2"] = "DEC"
-hdu_hi.header["CDELT1"] = 0.025
-hdu_hi.header["CDELT2"] = 0.025
-hdu_hi.header["CRVAL1"] = 0.0
-hdu_hi.header["CRVAL2"] = 0.0
-
-hdu_lo.header["CTYPE1"] = "RA"
-hdu_lo.header["CTYPE2"] = "DEC"
-hdu_lo.header["CDELT1"] = 0.1
-hdu_lo.header["CDELT2"] = 0.1
-hdu_lo.header["CRVAL1"] = 0.0
-hdu_lo.header["CRVAL2"] = 0.0
-
-feather_plot(hdu_hi, hdu_lo, lowresfwhm=2.0 * u.deg)
+pl.suptitle("Residual Input-Feathered (singledish 40arcsec+interferometer) pl=1.5 image")
+pl.subplot(1,2,2)
+pl.hist((im-combo.real).ravel(), bins=50)
+pl.savefig("residual_feathered_image_pl1.5.png")
