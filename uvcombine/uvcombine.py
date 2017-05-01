@@ -271,8 +271,11 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
         convolved with the lowresfwhm beam.
     replace_hires: Quantity or False
         If set, will simply replace the fourier transform of the single-dish
-        data with the fourier transform of the interferometric data above
-        the specified kernel level.  Overrides other parameters.
+        data with the fourier transform of the interferometric data above the
+        specified kernel level.  Can be used in conjunction with either
+        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        threshold value; this threshold will be applied to the single-dish
+        kernel.
     deconvSD: bool
         Deconvolve the single-dish data before adding in fourier space?
         This "deconvolution" is a simple division of the fourier transform
@@ -292,6 +295,16 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
     fft_hi = np.fft.fft2(np.nan_to_num(im_hi))
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
+    # Combine and inverse fourier transform the images
+    if highpassfilterSD:
+        lo_conv = kfft*fft_lo
+    elif deconvSD:
+        lo_conv = fft_lo / kfft
+        lo_conv[kfft < min_beam_fraction] = 0
+    else:
+        lo_conv = fft_lo
+
+
     if replace_hires:
         if replace_hires is True:
             raise ValueError("If you are specifying replace_hires, "
@@ -299,23 +312,13 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
                              "corresponding to the beam-fraction of the "
                              "single-dish image below which the "
                              "high-resolution data will be used.")
-        fftsum = fft_lo.copy()
+        fftsum = lo_conv.copy()
 
         # mask where the hires data is above a threshold
         mask = ikfft > replace_hires
 
         fftsum[mask] = fft_hi[mask]
-
     else:
-        # Combine and inverse fourier transform the images
-        if highpassfilterSD:
-            lo_conv = kfft*fft_lo
-        elif deconvSD:
-            lo_conv = fft_lo / kfft
-            lo_conv[kfft < min_beam_fraction] = 0
-        else:
-            lo_conv = fft_lo
-
         fftsum = lo_conv + ikfft*fft_hi
 
     combo = np.fft.ifft2(fftsum)
@@ -692,8 +695,11 @@ def feather_simple(hires, lores,
         for further details about what feather does and how this relates.
     replace_hires: Quantity or False
         If set, will simply replace the fourier transform of the single-dish
-        data with the fourier transform of the interferometric data above
-        the specified kernel level.  Overrides other parameters.
+        data with the fourier transform of the interferometric data above the
+        specified kernel level.  Can be used in conjunction with either
+        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        threshold value; this threshold will be applied to the single-dish
+        kernel.
     deconvSD: bool
         Deconvolve the single-dish data before adding in fourier space?
         This "deconvolution" is a simple division of the fourier transform
