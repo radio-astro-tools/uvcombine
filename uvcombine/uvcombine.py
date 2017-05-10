@@ -117,19 +117,15 @@ def match_flux_units(image, image_header, target_header):
         # Updated header: converting the input image to target image units
         image_header.update(target_beam.to_header_keywords())
 
-    elif target_unit.is_equivalent(u.K):
-
-        if image_unit.is_equivalent(u.K):
-            # no change needed
-            pass
-
+    elif target_unit.is_equivalent(u.K) and not image_unit.is_equivalent(u.K):
         cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
         cfreq_target = target_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
         if cfreq_in != cfreq_target:
-            raise ValueError("To combine images with brightness temperature "
-                             "units, the observed frequency must be specified "
-                             "in the header using CRVAL3, CRPIX3, CDELT3, "
-                             "and CUNIT3, and they must be the same.")
+            raise ValueError("To combine images with brightness"
+                             "temperature units, the observed frequency"
+                             " must be specified in the header using "
+                             "CRVAL3, CRPIX3, CDELT3, and CUNIT3, and "
+                             "they must be the same.")
         if image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0]
             equivalency = u.brightness_temperature(image_beam, cfreq_in,)
