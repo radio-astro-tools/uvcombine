@@ -1,14 +1,8 @@
-
-# import image_registration
+import image_registration
 from astropy import convolution
-from astropy.io import fits
-import astropy.units as u
 import numpy as np
-# import pylab as pl
-import matplotlib.pyplot as pl
-import scipy.ndimage as nd
+import pylab as pl
 from uvcombine.uvcombine import feather_kernel, fftmerge
-from uvcombine.feather_plot import feather_plot
 
 
 pl.rcParams['image.interpolation'] = 'nearest'
@@ -20,27 +14,7 @@ pl.rcParams['image.origin'] = 'lower'
 # different power laws, different types of input...)
 # We're assuming a scale of 1"/pixel for this example
 np.random.seed(0)
-
-
-def make_plaw_img(ny=256, nx=256, pow=1.5, scale=3):
-
-    yy, xx = np.indices((ny, nx))
-    r = ((yy - ny // 2)**2 + (xx - nx // 2)**2)**0.5
-    r[ny // 2, nx // 2] = 1
-    phase = np.random.rand(ny, nx) * 2 * np.pi
-
-    ky, kx = np.meshgrid(np.fft.fftfreq(ny), np.fft.fftfreq(nx))
-    kr = (ky**2 + kx**2)
-    kr[kr == 0] = np.min(kr[kr > 0])
-    Amp = (kr)**(pow)
-    fftarray = Amp * np.cos(phase) + np.complex(0, 1) * Amp * np.sin(phase)
-    array = np.real(np.fft.ifft2(fftarray))
-
-    return array
-
-
-# im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
-im = make_plaw_img()
+im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
 
 # for each step, we'll save a figure
 pl.figure(1, figsize=(16,8)).clf()
@@ -63,13 +37,12 @@ rr = ((xgrid-im.shape[1]/2)**2+(ygrid-im.shape[0]/2)**2)**0.5
 # r=128 is the smallest angular scale, which is 2" (nyquist sampling....?)
 # That would make r=8 -> 32"...
 # I'm not sure that is right, I have to come back to it.
-ring = (rr >= 8) & (rr <= (256 / 3.))
+ring = (rr>=8) & (rr<=(256/3.))
 
 pl.clf()
 pl.imshow(ring)
 pl.title("UV Coverage Ring")
-# pl.savefig("uvcoverage_ring.png")
-pl.show()
+pl.savefig("uvcoverage_ring.png")
 
 # create the interferometric map by removing both large and small angular
 # scales in fourier space
@@ -89,10 +62,9 @@ pl.savefig("interf_image_pl1.5.png")
 # create the single-dish map by convolving the image with a FWHM=40" kernel
 # (this interpretation is much easier than the sharp-edged stuff in fourier
 # space because the kernel is created in real space)
-singledish_im = \
-    convolution.convolve_fft(im,
-                             convolution.Gaussian2DKernel(40 / 2.35),
-                             boundary='fill', fill_value=im.mean())
+singledish_im = convolution.convolve_fft(im,
+                                         convolution.Gaussian2DKernel(40/2.35),
+                                         boundary='fill', fill_value=im.mean())
 
 pl.clf()
 pl.subplot(1,2,1)
@@ -111,11 +83,12 @@ pl.imshow(np.fft.fftshift(np.abs(singledish_kernel_fft)), cmap='hot')
 pl.title("Single Dish UV coverage map")
 pl.savefig("singledish_uvcoverage.png")
 
+
 # pixel scale can be interpreted as "arcseconds"
 # then, fwhm=40 means a beam fwhm of 40"
 pixscale = 1
 lowresfwhm = 40
-nax1, nax2 = im.shape
+nax1,nax2 = im.shape
 kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
 
