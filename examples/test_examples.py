@@ -2,7 +2,7 @@
 # import image_registration
 from astropy import convolution
 from astropy.io import fits
-import astropy.unitsd as u
+import astropy.units as u
 import numpy as np
 # import pylab as pl
 import matplotlib.pyplot as pl
