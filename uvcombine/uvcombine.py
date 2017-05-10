@@ -151,6 +151,7 @@ def match_flux_units(image, image_header, target_header):
           target_unit.unit.is_equivalent(u.Jy/u.sr)) or
          target_unit.is_equivalent(u.Jy/u.sr))):
         if image_unit.is_equivalent(u.K):
+            cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
             equivalency = u.brightness_temperature(image_beam, cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0] / image_beam.sr
