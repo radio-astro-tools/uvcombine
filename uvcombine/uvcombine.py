@@ -27,7 +27,7 @@ def file_in(filename, extnum=0):
     """
     Take the input files. If input is already HDU, then return it.
     If input is a .fits filename, then read the .fits file.
-   
+
     Return
     ----------
     hdu :  obj
@@ -36,7 +36,7 @@ def file_in(filename, extnum=0):
        The image array
     header : header object
        The header of the input .fits file
-   
+
     Parameters
     ----------
     filename : str
@@ -48,7 +48,7 @@ def file_in(filename, extnum=0):
         hdu = filename
     else:
         hdu = fits.open(filename)[extnum]
-   
+
     im = hdu.data.squeeze()
     #header = FITS_tools.strip_headers.flatten_header(hdu.header)
     header = wcs_utils.strip_wcs_from_header(hdu.header)
@@ -57,7 +57,7 @@ def file_in(filename, extnum=0):
     header['NAXIS'] = im.ndim
     for ii,dim in enumerate(im.shape):
         header['NAXIS{0}'.format(im.ndim-ii)] = dim
-   
+
     return hdu, im, header
 
 
@@ -102,7 +102,7 @@ def match_flux_units(image, image_header, target_header):
 
     equivalency = None
 
-    if u.beam in image_unit.bases:
+    if u.beam in image_unit.bases or u.beam in target_unit.bases:
         image_beam = radio_beam.Beam.from_fits_header(image_header)
 
     if target_unit.is_equivalent(u.Jy/u.beam):
@@ -117,18 +117,16 @@ def match_flux_units(image, image_header, target_header):
         # Updated header: converting the input image to target image units
         image_header.update(target_beam.to_header_keywords())
 
-    elif target_unit.is_equivalent(u.K):
+    elif target_unit.is_equivalent(u.K) and not image_unit.is_equivalent(u.K):
         cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
         cfreq_target = target_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
         if cfreq_in != cfreq_target:
-            raise ValueError("To combine images with brightness temperature "
-                             "units, the observed frequency must be specified "
-                             "in the header using CRVAL3, CRPIX3, CDELT3, "
-                             "and CUNIT3, and they must be the same.")
-        if image_unit.is_equivalent(u.K):
-            # no change needed
-            pass
-        elif image_unit.is_equivalent(u.Jy/u.beam):
+            raise ValueError("To combine images with brightness"
+                             "temperature units, the observed frequency"
+                             " must be specified in the header using "
+                             "CRVAL3, CRPIX3, CDELT3, and CUNIT3, and "
+                             "they must be the same.")
+        if image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0]
             equivalency = u.brightness_temperature(image_beam, cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.pixel):
@@ -149,6 +147,7 @@ def match_flux_units(image, image_header, target_header):
           target_unit.unit.is_equivalent(u.Jy/u.sr)) or
          target_unit.is_equivalent(u.Jy/u.sr))):
         if image_unit.is_equivalent(u.K):
+            cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
             equivalency = u.brightness_temperature(image_beam, cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0] / image_beam.sr
@@ -1108,7 +1107,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
 
     kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
-    
+
     # there may not be an alternative to this anywhere in the astropy ecosystem
     cube_smooth = FITS_tools.cube_regrid.spectral_smooth_cube(cube,
                                                               kernelwidth)
