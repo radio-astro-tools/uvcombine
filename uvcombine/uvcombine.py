@@ -747,7 +747,9 @@ def feather_simple(hires, lores,
                    replace_hires=False,
                    deconvSD=False,
                    return_hdu=False,
-                   return_regridded_lores=False):
+                   return_regridded_lores=False,
+                   match_units=True,
+                  ):
     """
     Fourier combine two single-plane images.  This follows the CASA approach,
     as far as it is discernable.  Both images should be actual images of the
@@ -810,6 +812,9 @@ def feather_simple(hires, lores,
         planes, one for the real and one for the imaginary data.
     return_regridded_lores : bool
         Return the 2nd image regridded into the pixel space of the first?
+    match_units : bool
+        Attempt to match the flux units between the files before combining?
+        See `match_flux_units`.
 
     Returns
     -------
@@ -826,13 +831,14 @@ def feather_simple(hires, lores,
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
-    # After this step, the units of im_hi are some sort of surface brightness
-    # unit equivalent to that specified in the high-resolution header's units
-    # Note that this step does NOT preserve the values of im_lowraw and
-    # header_lowraw from above
-    im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                             image_header=header_low.copy(),
-                                             target_header=header_hi)
+    if match_units:
+        # After this step, the units of im_hi are some sort of surface brightness
+        # unit equivalent to that specified in the high-resolution header's units
+        # Note that this step does NOT preserve the values of im_lowraw and
+        # header_lowraw from above
+        im_lowraw, header_low = match_flux_units(image=im_lowraw,
+                                                 image_header=header_low.copy(),
+                                                 target_header=header_hi)
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
                                                    im1=im_hi,
