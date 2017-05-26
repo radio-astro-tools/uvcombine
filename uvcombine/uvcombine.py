@@ -1349,7 +1349,7 @@ def feather_compare(hires, lores,
         #pl.legend(loc='best')
 
     if return_ratios:
-        return ratio
+        return angscales.to(u.arcsec)[mask], ratio
 
     return {'median': np.nanmedian(ratio),
             'mean': np.nanmean(ratio),
