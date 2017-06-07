@@ -52,7 +52,7 @@ def find_effSDbeam(hires, lores,
                               SAS=lowresfwhm,
                               LAS=LAS,
                               lowresfwhm=lowresfwhm,
-                              return_ratios=True,
+                              return_samples=True,
                               doplot=False)
 
         radii = out[0].to(u.karcsec)
