@@ -1152,6 +1152,7 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
                           return_regridded_cube_lo=False,
                           return_hdu=False,
+                          maximum_cube_size=1e8,
                          ):
     """
     Fourier combine two data cubes
@@ -1185,7 +1186,7 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     if isinstance(cube_lo, str):
         cube_lo = SpectralCube.read(cube_lo)
 
-    if cube_hi.size > 1e8:
+    if cube_hi.size > maximum_cube_size:
         raise ValueError("Cube is probably too large "
                          "for this operation to work in memory")
 
