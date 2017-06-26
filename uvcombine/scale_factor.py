@@ -159,8 +159,10 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
 
     elif method == "linfit":
 
-        sc_factor, intercept, sc_confint = \
+        sc_factor, intercept, sc_lowlim, sc_highlim = \
             stats.theilslopes(highres_pts, x=lowres_pts, **method_kwargs)
+
+        sc_confint = np.array([sc_lowlim, sc_highlim])
 
         if verbose:
             import matplotlib.pyplot as pl
