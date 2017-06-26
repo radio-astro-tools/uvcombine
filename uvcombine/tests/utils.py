@@ -121,12 +121,17 @@ def interferometrically_observe_image(image, pixel_scale,
 
     ygrid, xgrid = np.indices(image.shape, dtype='float')
     rr = ((xgrid-image.shape[1]/2)**2+(ygrid-image.shape[0]/2)**2)**0.5
-    rr_uv = (rr / rr.max() / 2. / pixel_scale)
 
     # Create a UV sampling mask.
     # *please sanity check this!*
     # Are the "UV" data correct, or are they off by a factor of 2?
-    ring = (1/rr_uv < largest_angular_scale) & (1/rr_uv > smallest_angular_scale)
+    # rr_uv = (rr / rr.max() / 2. / pixel_scale)
+    # ring = (1/rr_uv < largest_angular_scale) & (1/rr_uv > smallest_angular_scale)
+
+    # EWK -- Something is off in the above masking.
+    img_scale = image.shape[0] * pixel_scale
+    ring = (rr >= (img_scale / largest_angular_scale)) & \
+        (rr <= (img_scale / smallest_angular_scale))
 
     # create the interferometric map by removing both large and small angular
     # scales in fourier space
