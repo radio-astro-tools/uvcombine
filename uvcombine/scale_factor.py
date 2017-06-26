@@ -132,13 +132,32 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
 
         ratio = highres_pts / lowres_pts
 
-        # Fit a Cauchy distribution to the log of the ratios=
+        ratio = ratio[np.isfinite(ratio)]
+
+        # Fit a Cauchy distribution to the log of the ratios
         log_ratio = np.log(ratio)
 
         params = stats.cauchy.fit(ratio)
 
+        # Try to get standard errors from a Likelihood fit with statsmodels
+        try:
+            import statsmodels
+
+            mle_model = Likelihood(log_ratio)
+            fitted_model = mle_model.fit(params, method='nm')
+            fitted_model.df_model = len(ratio)
+            fitted_model.df_resid = len(ratio) - 2
+
+            params = fitted_model.params
+            stderr = fitted_model.bse
+
+        except ImportError:
+
+            stderr = np.zeros_like(params)
+
         # The median is the scale factor.
         sc_factor = np.exp(params[0])
+        sc_factor_stderr = stderr[0] * sc_factor
 
         if verbose:
             import matplotlib.pyplot as pl
@@ -148,7 +167,7 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
             pl.plot(x_vals, stats.cauchy.pdf(x_vals, *params))
             pl.xlabel("log Ratio")
 
-        return sc_factor
+        return sc_factor, sc_factor_stderr
 
     elif method == "linfit":
 
@@ -188,3 +207,28 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
     else:
         raise ValueError("method must be 'distrib', 'linfit', or "
                          "'clippedstats'.")
+
+
+try:
+    from statsmodels.base.model import GenericLikelihoodModel
+
+    class Likelihood(GenericLikelihoodModel):
+
+        # Get the number of parameters from shapes.
+        # Add one for scales, since we're assuming loc is frozen.
+        # Keeping loc=0 is appropriate for log-normal models.
+        nparams = 1 if stats.cauchy.shapes is None else \
+            len(stats.cauchy.shapes.split(",")) + 1
+
+        def loglike(self, params):
+            if np.isnan(params).any():
+                return - np.inf
+
+            loglikes = \
+                stats.cauchy.logpdf(self.endog, *params[:-2],
+                                    scale=params[-1],
+                                    loc=params[-2])
+            if not np.isfinite(loglikes).all():
+                return - np.inf
+            else:
+                return loglikes.sum()
