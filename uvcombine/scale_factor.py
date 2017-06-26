@@ -6,23 +6,11 @@ interferometric data.
 
 """
 
-import image_tools
-import radio_beam
-from reproject import reproject_interp
-from spectral_cube import SpectralCube
-from spectral_cube import wcs_utils
-from astropy.io import fits
 from astropy import units as u
-from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-import FITS_tools
-#from FITS_tools.hcongrid import hcongrid_hdu
-#from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import stats as astrostats
-from astropy.convolution import convolve_fft, Gaussian2DKernel
 from scipy import stats
-
 
 from .uvcombine import feather_compare
 
