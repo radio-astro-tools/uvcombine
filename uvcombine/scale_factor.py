@@ -232,3 +232,6 @@ try:
                 return - np.inf
             else:
                 return loglikes.sum()
+
+except ImportError:
+    pass
