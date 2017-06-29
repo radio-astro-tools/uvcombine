@@ -30,6 +30,34 @@ def find_effSDbeam(hires, lores,
     See Sec. 3.2.1 in Stanimirovic (1999)
     https://ui.adsabs.harvard.edu/#abs/1999PhDT........21S/abstract
 
+    Parameters
+    ----------
+    hires : np.ndarray
+        Sample of high-resolution points.
+    lores : np.ndarray
+        Sample of low-resolution points. The order of `hires` and `lores`
+        should match!
+    lowresfwhms : `~astropy.units.Quantity`
+        Values for the low-resolution FWHM to test. These should have an
+        angular unit.
+    beam_divide_lores: bool, optional
+        See `uvcombine.feather_compare`.
+    highpassfilterSD : bool, optional
+        See `uvcombine.fftmerge`.
+    min_beam_fraction : float, optional
+        See `uvcombine.feather_compare`.
+    alpha : float between 0 and 1
+        The confidence interval range for the uncertainties on the slopes.
+    verbose : bool, optional
+        Enables plotting.
+
+    Returns
+    -------
+    slopes : np.ndarray
+        Values of the slopes for the given `lowresfwhms`.
+    slopes_CI : np.ndarray
+        Upper and lower confidence intervals for the slopes. The confidence
+        interval region is set by `alpha`.
     '''
 
     slopes = np.empty(lowresfwhms.size)
