@@ -4,6 +4,10 @@ from astropy.io import fits
 from astropy import units as u
 import numpy as np
 
+
+from ..uvcombine import feather_compare
+
+
 def generate_test_data(imsize, powerlaw, seed=0):
     """
     Simple wrapper of `image_registration.tests.make_extended`
@@ -12,10 +16,38 @@ def generate_test_data(imsize, powerlaw, seed=0):
     im = image_registration.tests.make_extended(imsize=imsize, powerlaw=powerlaw)
     return im
 
+
+def generate_header(pixel_scale, beamfwhm, imsize, restfreq):
+
+    header = {'CDELT1': -(pixel_scale).to(u.deg).value,
+              'CDELT2': (pixel_scale).to(u.deg).value,
+              'BMAJ': beamfwhm.to(u.deg).value,
+              'BMIN': beamfwhm.to(u.deg).value,
+              'BPA': 0.0,
+              'CRPIX1': imsize / 2.,
+              'CRPIX2': imsize / 2.,
+              'CRVAL1': 0.0,
+              'CRVAL2': 0.0,
+              'CTYPE1': 'GLON-CAR',
+              'CTYPE2': 'GLAT-CAR',
+              'CUNIT1': 'deg',
+              'CUNIT2': 'deg',
+              'CRVAL3': restfreq.to(u.Hz).value,
+              'CUNIT3': 'Hz',
+              'CDELT3': 1e6,  # 1 MHz; doesn't matter
+              'CRPIX3': 1,
+              'CTYPE3': 'FREQ',
+              'RESTFRQ': restfreq.to(u.Hz).value,
+              'BUNIT': 'MJy/sr',
+              }
+
+    return fits.Header(header)
+
+
 def generate_test_fits(imsize, powerlaw, beamfwhm,
-                       pixel_scale=1*u.arcsec, seed=0,
-                       restfreq=100*u.GHz,
-                      ):
+                       pixel_scale=1 * u.arcsec, seed=0,
+                       restfreq=100 * u.GHz,
+                       ):
     """
     Create a FITS image using ``image_registration``'s toolkit for producing
     power-law power-spectrum images.
@@ -50,29 +82,9 @@ def generate_test_fits(imsize, powerlaw, beamfwhm,
 
     im = generate_test_data(imsize=imsize, powerlaw=powerlaw, seed=seed)
 
-    header = {'CDELT1': -(pixel_scale).to(u.deg).value,
-              'CDELT2': (pixel_scale).to(u.deg).value,
-              'BMAJ': beamfwhm.to(u.deg).value,
-              'BMIN': beamfwhm.to(u.deg).value,
-              'BPA': 0.0,
-              'CRPIX1': imsize/2.,
-              'CRPIX2': imsize/2.,
-              'CRVAL1': 0.0,
-              'CRVAL2': 0.0,
-              'CTYPE1': 'GLON-CAR',
-              'CTYPE2': 'GLAT-CAR',
-              'CUNIT1': 'deg',
-              'CUNIT2': 'deg',
-              'CRVAL3': restfreq.to(u.Hz).value,
-              'CUNIT3': 'Hz',
-              'CDELT3': 1e6, # 1 MHz; doesn't matter
-              'CRPIX3': 1,
-              'CTYPE3': 'FREQ',
-              'RESTFRQ': restfreq.to(u.Hz).value,
-              'BUNIT': 'MJy/sr',
-             }
+    header = generate_header(pixel_scale, beamfwhm, imsize, restfreq)
 
-    hdu = fits.PrimaryHDU(data=im, header=fits.Header(header))
+    hdu = fits.PrimaryHDU(data=im, header=header)
 
     return hdu
 
@@ -109,12 +121,17 @@ def interferometrically_observe_image(image, pixel_scale,
 
     ygrid, xgrid = np.indices(image.shape, dtype='float')
     rr = ((xgrid-image.shape[1]/2)**2+(ygrid-image.shape[0]/2)**2)**0.5
-    rr_uv = (rr / rr.max() / 2. / pixel_scale)
 
     # Create a UV sampling mask.
     # *please sanity check this!*
     # Are the "UV" data correct, or are they off by a factor of 2?
-    ring = (1/rr_uv < largest_angular_scale) & (1/rr_uv > smallest_angular_scale)
+    # rr_uv = (rr / rr.max() / 2. / pixel_scale)
+    # ring = (1/rr_uv < largest_angular_scale) & (1/rr_uv > smallest_angular_scale)
+
+    # EWK -- Something is off in the above masking.
+    img_scale = image.shape[0] * pixel_scale
+    ring = (rr >= (img_scale / largest_angular_scale)) & \
+        (rr <= (img_scale / smallest_angular_scale))
 
     # create the interferometric map by removing both large and small angular
     # scales in fourier space
@@ -155,3 +172,51 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
                                              boundary='fill', fill_value=image.mean())
 
     return singledish_im
+
+
+def test_data(return_images=True):
+
+    imsize = 512
+
+    orig_img = generate_test_data(imsize, 1.5, seed=67848923)
+
+    largest_scale = 56. * u.arcsec
+    smallest_scale = 3. * u.arcsec
+    lowresfwhm = 30. * u.arcsec
+    pixel_scale = 1 * u.arcsec
+    restfreq = (2 * u.mm).to(u.GHz, u.spectral())
+
+    sd_img = singledish_observe_image(orig_img, pixel_scale, lowresfwhm)
+
+    interf_img = \
+        interferometrically_observe_image(orig_img, pixel_scale,
+                                          largest_scale,
+                                          smallest_scale)[0].real
+
+    # Make these FITS HDUs
+    orig_hdr = generate_header(pixel_scale, pixel_scale, imsize, restfreq)
+    orig_hdu = fits.PrimaryHDU(orig_img, header=orig_hdr)
+
+    sd_hdr = generate_header(pixel_scale, lowresfwhm, imsize, restfreq)
+    sd_hdu = fits.PrimaryHDU(sd_img, header=sd_hdr)
+
+    interf_hdr = generate_header(pixel_scale, smallest_scale, imsize, restfreq)
+    interf_hdu = fits.PrimaryHDU(interf_img, header=interf_hdr)
+
+    if return_images:
+        return orig_hdu, sd_hdu, interf_hdu
+
+    angscales, ratios, highres_pts, lowres_pts = \
+        feather_compare(interf_hdu, sd_hdu, SAS=lowresfwhm, LAS=largest_scale,
+                        lowresfwhm=lowresfwhm, return_samples=True,
+                        doplot=False)
+
+    # There are a bunch of tiny points that should be empty, but aren't b/c
+    # of numerical rounding
+    good_pts = ratios > 1e-10
+    angscales = angscales[good_pts]
+    ratios = ratios[good_pts]
+    highres_pts = highres_pts[good_pts]
+    lowres_pts = lowres_pts[good_pts]
+
+    return angscales, ratios, lowres_pts, highres_pts

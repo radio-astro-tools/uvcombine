@@ -1248,6 +1248,7 @@ def feather_compare(hires, lores,
                     min_beam_fraction=0.1,
                     plot_min_beam_fraction=1e-3,
                     doplot=True,
+                    return_samples=False
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1278,6 +1279,10 @@ def feather_compare(hires, lores,
         Like min_beam_fraction, but used only for plotting
     doplot : bool
         If true, make plots.  Otherwise will just return the results.
+    return_samples : bool, optional
+        Return the samples in the overlap region. This includes: the angular
+        scale at each point, the ratio, the high-res values, and the low-res
+        values.
 
     Returns
     -------
@@ -1345,6 +1350,10 @@ def feather_compare(hires, lores,
         pl.vlines([SAS.to(u.arcsec).value,LAS.to(u.arcsec).value],
                   ylim[0], ylim[1], linestyle='-', color='k')
         #pl.legend(loc='best')
+
+    if return_samples:
+        return (angscales.to(u.arcsec)[mask], ratio, np.abs(fft_hi)[mask],
+                np.abs(fft_lo_deconvolved)[mask])
 
     return {'median': np.nanmedian(ratio),
             'mean': np.nanmean(ratio),
