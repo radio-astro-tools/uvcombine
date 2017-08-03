@@ -94,8 +94,8 @@ def match_flux_units(image, image_header, target_header):
     if 'BUNIT' not in target_header:
         raise ValueError("Target header must have a BUNIT specified")
 
-    im_wcs = wcs.WCS(image_header)
-    target_wcs = wcs.WCS(target_header)
+    im_wcs = wcs.WCS(image_header).celestial
+    target_wcs = wcs.WCS(target_header).celestial
 
     target_unit = u.Unit(target_header['BUNIT'])
     image_unit = u.Unit(image_header['BUNIT'])
