@@ -863,6 +863,56 @@ def feather_simple(hires, lores,
     else:
         return combo
 
+def linear_combine(hires, lores,
+                   highresextnum=0,
+                   lowresextnum=0,
+                   highresscalefactor=1.0,
+                   lowresscalefactor=1.0,
+                   lowresfwhm=None,
+                   return_hdu=False,
+                   return_regridded_lores=False,
+                   match_units=True,
+                   convolve=convolve_fft,
+                  ):
+    """
+    Implement a simple linear combination following Faridani et al 2017
+    """
+
+    hdu_hi, im_hi, header_hi = file_in(hires)
+    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    if lowresfwhm is None:
+        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        lowresfwhm = beam_low.major
+        log.info("Low-res FWHM: {0}".format(lowresfwhm))
+
+    if match_units:
+        # After this step, the units of im_hi are some sort of surface brightness
+        # unit equivalent to that specified in the high-resolution header's units
+        # Note that this step does NOT preserve the values of im_lowraw and
+        # header_lowraw from above
+        im_lowraw, header_low = match_flux_units(image=im_lowraw,
+                                                 image_header=header_low.copy(),
+                                                 target_header=header_hi)
+
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
+                                                   im1=im_hi,
+                                                   im2raw=im_lowraw,
+                                                   hd2=header_low)
+
+    missing_flux = im_low - convolve(im_hi, beam_low.as_kernel(pixscale))
+
+    combo = missing_flux + im_hi
+
+    if return_hdu:
+        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
+        combo = combo_hdu
+
+    if return_regridded_lores:
+        return combo, hdu_low
+    else:
+        return combo
+
 def feather_plot(hires, lores,
                  highresextnum=0,
                  lowresextnum=0,
