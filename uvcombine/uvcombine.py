@@ -1248,7 +1248,8 @@ def feather_compare(hires, lores,
                     min_beam_fraction=0.1,
                     plot_min_beam_fraction=1e-3,
                     doplot=True,
-                    return_samples=False
+                    return_samples=False,
+                    weights=None,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1283,6 +1284,12 @@ def feather_compare(hires, lores,
         Return the samples in the overlap region. This includes: the angular
         scale at each point, the ratio, the high-res values, and the low-res
         values.
+    weights : `~numpy.ndarray`, optional
+        Provide an array of weights with the spatial shape of the high-res
+        data. This is useful when either of the data have emission at the map
+        edge, which will lead to ringing in the Fourier transform. A weights
+        array can be provided to smoothly taper the edges of each map to avoid
+        this issue.
 
     Returns
     -------
@@ -1293,8 +1300,17 @@ def feather_compare(hires, lores,
 
     """
     assert LAS > SAS
+
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
+
+    # If weights are given, they must match the shape of the hires data
+    if weights is not None:
+        if not weights.shape == im_hi.shape:
+            raise ValueError("weights must be an array with the same shape as"
+                             " the high-res data.")
+    else:
+        weights = 1.
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
@@ -1307,8 +1323,8 @@ def feather_compare(hires, lores,
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
     angscales = nax1/rr * pixscale*u.deg
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi * weights)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low * weights)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
