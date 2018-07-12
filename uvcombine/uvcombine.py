@@ -58,6 +58,16 @@ def file_in(filename, extnum=0):
     for ii,dim in enumerate(im.shape):
         header['NAXIS{0}'.format(im.ndim-ii)] = dim
 
+
+    # Attempt to determine spectral information and store that data for use
+    # later
+    imspwcs = wcs.WCS(hdu.header).sub([wcs.WCSSUB_SPECTRAL])
+    if imspwcs.wcs.naxis == 1:
+        reffreq, = u.Quantity(imspwcs.wcs_pix2world([0], 0),
+                              unit=imspwcs.wcs.cunit[0])[0]
+        reffreq = reffreq.to(u.Hz)
+        header['REFFREQ'] = reffreq.value
+
     return hdu, im, header
 
 
@@ -118,8 +128,8 @@ def match_flux_units(image, image_header, target_header):
         image_header.update(target_beam.to_header_keywords())
 
     elif target_unit.is_equivalent(u.K) and not image_unit.is_equivalent(u.K):
-        cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
-        cfreq_target = target_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
+        cfreq_in = image_header['REFFREQ']*u.Hz
+        cfreq_target = target_header['REFFREQ']*u.Hz
         if cfreq_in != cfreq_target:
             raise ValueError("To combine images with brightness"
                              "temperature units, the observed frequency"
@@ -128,11 +138,13 @@ def match_flux_units(image, image_header, target_header):
                              "they must be the same.")
         if image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0]
-            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+            equivalency = u.brightness_temperature(beam_area=image_beam,
+                                                   frequency=cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.pixel):
             pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
             image_unit = image_unit.bases[0]
-            equivalency = u.brightness_temperature(pixel_area, cfreq_in,)
+            equivalency = u.brightness_temperature(beam_area=pixel_area,
+                                                   frequency=cfreq_in,)
         target_header_unit = 'K'
     elif target_unit.is_equivalent(u.Jy/u.pixel):
         raise ValueError("Jy/pixel is not an accepted unit to convert into "
@@ -147,8 +159,8 @@ def match_flux_units(image, image_header, target_header):
           target_unit.unit.is_equivalent(u.Jy/u.sr)) or
          target_unit.is_equivalent(u.Jy/u.sr))):
         if image_unit.is_equivalent(u.K):
-            cfreq_in = im_wcs.sub([wcs.WCSSUB_SPECTRAL]).wcs_world2pix([0], 0)[0][0]
-            equivalency = u.brightness_temperature(image_beam, cfreq_in,)
+            cfreq_in = image_header['REFFREQ']*u.Hz
+            equivalency = u.brightness_temperature(frequency=cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0] / image_beam.sr
         elif image_unit.is_equivalent(u.Jy/u.pixel):
@@ -921,10 +933,15 @@ def feather_plot(hires, lores,
                  lowresfwhm=None,
                  highpassfilterSD=False,
                  xaxisunit='arcsec',
+                 hires_threshold=None,
+                 lores_threshold=None,
+                 match_units=True,
                 ):
     """
     Plot the power spectra of two images that would be combined
     along with their weights.
+
+    High-res will be shown in red, low-res in blue.
 
     Parameters
     ----------
@@ -945,6 +962,13 @@ def feather_plot(hires, lores,
     xaxisunit : 'arcsec' or 'lambda'
         The X-axis units.  Either arcseconds (angular scale on the sky)
         or baseline length (lambda)
+    hires_threshold : float or None
+    lores_threshold : float or None
+        Threshold to cut off before computing power spectrum to remove
+        the noise contribution.  Threshold will be applied *after* scalefactor.
+    match_units : bool
+        Attempt to match the flux units between the files before combining?
+        See `match_flux_units`.
 
     Returns
     -------
@@ -959,9 +983,23 @@ def feather_plot(hires, lores,
     print("featherplot")
     pb = ProgressBar(13)
 
+    if match_units:
+        # After this step, the units of im_hi are some sort of surface brightness
+        # unit equivalent to that specified in the high-resolution header's units
+        # Note that this step does NOT preserve the values of im_lowraw and
+        # header_lowraw from above
+        im_lowraw, header_low = match_flux_units(image=im_lowraw,
+                                                 image_header=header_low.copy(),
+                                                 target_header=header_hi)
+
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
     pb.update()
+
+    if lowresfwhm is None:
+        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        lowresfwhm = beam_low.major
+        log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     log.debug("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
@@ -972,9 +1010,19 @@ def feather_plot(hires, lores,
     ikfft = np.fft.fftshift(ikfft)
     pb.update()
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+    if hires_threshold is None:
+        fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+    else:
+        hires_tofft = np.nan_to_num(im_hi*highresscalefactor)
+        hires_tofft[hires_tofft < hires_threshold] = 0
+        fft_hi = np.fft.fftshift(np.fft.fft2(hires_tofft))
     pb.update()
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+    if lores_threshold is None:
+        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+    else:
+        lores_tofft = np.nan_to_num(im_low*lowresscalefactor)
+        lores_tofft[lores_tofft < lores_threshold] = 0
+        fft_lo = np.fft.fftshift(np.fft.fft2(lores_tofft))
     pb.update()
 
     rad,azavg_kernel = image_tools.radialprofile.azimuthalAverage(np.abs(kfft), returnradii=True)
