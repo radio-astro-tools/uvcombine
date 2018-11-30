@@ -7,7 +7,6 @@ Code for fourier-space combination of single dish and interferometer data
     UV space, but then does image combination + image-space deconvolution,
     which is not performed here)
 """
-import image_tools
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube
@@ -977,6 +976,7 @@ def feather_plot(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
+    import image_tools
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
