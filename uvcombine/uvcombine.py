@@ -749,7 +749,8 @@ def feather_simple(hires, lores,
                    return_hdu=False,
                    return_regridded_lores=False,
                    match_units=True,
-                  ):
+                   weights=None,
+                   ):
     """
     Fourier combine two single-plane images.  This follows the CASA approach,
     as far as it is discernable.  Both images should be actual images of the
@@ -815,6 +816,13 @@ def feather_simple(hires, lores,
     match_units : bool
         Attempt to match the flux units between the files before combining?
         See `match_flux_units`.
+    weights : `~numpy.ndarray`, optional
+        Provide an array of weights with the spatial shape of the high-res
+        data. This is useful when either of the data have emission at the map
+        edge, which will lead to ringing in the Fourier transform. A weights
+        array can be provided to smoothly taper the edges of each map to avoid
+        this issue. **This will be applied to both the low and high resolution
+        images!**
 
     Returns
     -------
@@ -830,6 +838,14 @@ def feather_simple(hires, lores,
         beam_low = radio_beam.Beam.from_fits_header(header_low)
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
+
+    # If weights are given, they must match the shape of the hires data
+    if weights is not None:
+        if not weights.shape == im_hi.shape:
+            raise ValueError("weights must be an array with the same shape as"
+                             " the high-res data.")
+    else:
+        weights = 1.
 
     if match_units:
         # After this step, the units of im_hi are some sort of surface brightness
@@ -847,12 +863,13 @@ def feather_simple(hires, lores,
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
-    fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
-                             im_low*lowresscalefactor,
+    fftsum, combo = fftmerge(kfft, ikfft,
+                             im_hi * highresscalefactor * weights,
+                             im_low * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              highpassfilterSD=highpassfilterSD,
                              deconvSD=deconvSD,
-                            )
+                             )
 
     if return_hdu:
         combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
