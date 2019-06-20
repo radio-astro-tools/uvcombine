@@ -780,9 +780,13 @@ def feather_simple(hires, lores,
         The low-resolution (single-dish) FITS file
     highresextnum : int
         The extension number to use from the high-res FITS file
+    lowresextnum : int
+        The extension number to use from the high-res FITS file
     highresscalefactor : float
+        A factor to multiply the high-resolution data by to match the
+        low- or high-resolution data
     lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
+        A factor to multiply the low-resolution data by to match the
         low- or high-resolution data
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
@@ -831,8 +835,8 @@ def feather_simple(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    hdu_hi, im_hi, header_hi = file_in(hires, highresextnum)
+    hdu_low, im_lowraw, header_low = file_in(lores, lowresextnum)
 
     if lowresfwhm is None:
         beam_low = radio_beam.Beam.from_fits_header(header_low)
