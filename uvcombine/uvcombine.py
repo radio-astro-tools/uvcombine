@@ -742,6 +742,7 @@ def feather_simple(hires, lores,
                    lowresextnum=0,
                    highresscalefactor=1.0,
                    lowresscalefactor=1.0,
+                   pbresponse=None,
                    lowresfwhm=None,
                    highpassfilterSD=False,
                    replace_hires=False,
@@ -788,6 +789,12 @@ def feather_simple(hires, lores,
     lowresscalefactor : float
         A factor to multiply the low-resolution data by to match the
         low- or high-resolution data
+    pbresponse : `~numpy.ndarray`
+        The primary beam response of the high-resolution data. When given,
+        `highresfitsfile` should **not** be primary-beam corrected.
+        `pbresponse` will be multiplied with `lowresfitsfile`, and the
+        feathered image will be divided by `pbresponse` to create the final
+        image.
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
@@ -851,6 +858,11 @@ def feather_simple(hires, lores,
     else:
         weights = 1.
 
+    if pbresponse is not None:
+        if not pbresponse.shape == im_hi.shape:
+            raise ValueError("pbresponse must be an array with the same"
+                             " shape as the high-res data.")
+
     if match_units:
         # After this step, the units of im_hi are some sort of surface brightness
         # unit equivalent to that specified in the high-resolution header's units
@@ -865,6 +877,10 @@ def feather_simple(hires, lores,
                                                    im2raw=im_lowraw,
                                                    hd2=header_low)
 
+    # Apply the pbresponse to the regridded low-resolution data
+    if pbresponse is not None:
+        im_low *= pbresponse
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft,
@@ -874,6 +890,10 @@ def feather_simple(hires, lores,
                              highpassfilterSD=highpassfilterSD,
                              deconvSD=deconvSD,
                              )
+
+    # Divide by the
+    if pbresponse is not None:
+        combo /= pbresponse
 
     if return_hdu:
         combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
