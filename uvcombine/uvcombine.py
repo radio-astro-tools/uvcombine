@@ -782,7 +782,7 @@ def feather_simple(hires, lores,
     highresextnum : int
         The extension number to use from the high-res FITS file
     lowresextnum : int
-        The extension number to use from the high-res FITS file
+        The extension number to use from the low-res FITS file
     highresscalefactor : float
         A factor to multiply the high-resolution data by to match the
         low- or high-resolution data
