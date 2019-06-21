@@ -753,6 +753,7 @@ def feather_simple(hires, lores,
                    lowresextnum=0,
                    highresscalefactor=1.0,
                    lowresscalefactor=1.0,
+                   pbresponse=None,
                    lowresfwhm=None,
                    highpassfilterSD=False,
                    replace_hires=False,
@@ -760,7 +761,8 @@ def feather_simple(hires, lores,
                    return_hdu=False,
                    return_regridded_lores=False,
                    match_units=True,
-                  ):
+                   weights=None,
+                   ):
     """
     Fourier combine two single-plane images.  This follows the CASA approach,
     as far as it is discernable.  Both images should be actual images of the
@@ -790,10 +792,20 @@ def feather_simple(hires, lores,
         The low-resolution (single-dish) FITS file
     highresextnum : int
         The extension number to use from the high-res FITS file
+    lowresextnum : int
+        The extension number to use from the low-res FITS file
     highresscalefactor : float
-    lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
+        A factor to multiply the high-resolution data by to match the
         low- or high-resolution data
+    lowresscalefactor : float
+        A factor to multiply the low-resolution data by to match the
+        low- or high-resolution data
+    pbresponse : `~numpy.ndarray`
+        The primary beam response of the high-resolution data. When given,
+        `highresfitsfile` should **not** be primary-beam corrected.
+        `pbresponse` will be multiplied with `lowresfitsfile`, and the
+        feathered image will be divided by `pbresponse` to create the final
+        image.
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
@@ -826,6 +838,13 @@ def feather_simple(hires, lores,
     match_units : bool
         Attempt to match the flux units between the files before combining?
         See `match_flux_units`.
+    weights : `~numpy.ndarray`, optional
+        Provide an array of weights with the spatial shape of the high-res
+        data. This is useful when either of the data have emission at the map
+        edge, which will lead to ringing in the Fourier transform. A weights
+        array can be provided to smoothly taper the edges of each map to avoid
+        this issue. **This will be applied to both the low and high resolution
+        images!**
 
     Returns
     -------
@@ -834,13 +853,26 @@ def feather_simple(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    hdu_hi, im_hi, header_hi = file_in(hires, highresextnum)
+    hdu_low, im_lowraw, header_low = file_in(lores, lowresextnum)
 
     if lowresfwhm is None:
         beam_low = radio_beam.Beam.from_fits_header(header_low)
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
+
+    # If weights are given, they must match the shape of the hires data
+    if weights is not None:
+        if not weights.shape == im_hi.shape:
+            raise ValueError("weights must be an array with the same shape as"
+                             " the high-res data.")
+    else:
+        weights = 1.
+
+    if pbresponse is not None:
+        if not pbresponse.shape == im_hi.shape:
+            raise ValueError("pbresponse must be an array with the same"
+                             " shape as the high-res data.")
 
     if match_units:
         # After this step, the units of im_hi are some sort of surface brightness
@@ -856,14 +888,23 @@ def feather_simple(hires, lores,
                                                    im2raw=im_lowraw,
                                                    hd2=header_low)
 
+    # Apply the pbresponse to the regridded low-resolution data
+    if pbresponse is not None:
+        im_low *= pbresponse
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
-    fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
-                             im_low*lowresscalefactor,
+    fftsum, combo = fftmerge(kfft, ikfft,
+                             im_hi * highresscalefactor * weights,
+                             im_low * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              highpassfilterSD=highpassfilterSD,
                              deconvSD=deconvSD,
-                            )
+                             )
+
+    # Divide by the
+    if pbresponse is not None:
+        combo /= pbresponse
 
     if return_hdu:
         combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
@@ -1346,7 +1387,8 @@ def feather_compare(hires, lores,
                     min_beam_fraction=0.1,
                     plot_min_beam_fraction=1e-3,
                     doplot=True,
-                    return_samples=False
+                    return_samples=False,
+                    weights=None,
                    ):
     """
     Compare the single-dish and interferometer data over the region where they
@@ -1381,6 +1423,12 @@ def feather_compare(hires, lores,
         Return the samples in the overlap region. This includes: the angular
         scale at each point, the ratio, the high-res values, and the low-res
         values.
+    weights : `~numpy.ndarray`, optional
+        Provide an array of weights with the spatial shape of the high-res
+        data. This is useful when either of the data have emission at the map
+        edge, which will lead to ringing in the Fourier transform. A weights
+        array can be provided to smoothly taper the edges of each map to avoid
+        this issue.
 
     Returns
     -------
@@ -1391,8 +1439,17 @@ def feather_compare(hires, lores,
 
     """
     assert LAS > SAS
+
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
+
+    # If weights are given, they must match the shape of the hires data
+    if weights is not None:
+        if not weights.shape == im_hi.shape:
+            raise ValueError("weights must be an array with the same shape as"
+                             " the high-res data.")
+    else:
+        weights = 1.
 
     hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
                                                    im_lowraw, header_low)
@@ -1405,8 +1462,8 @@ def feather_compare(hires, lores,
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
     angscales = nax1/rr * pixscale*u.deg
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi * weights)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low * weights)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
