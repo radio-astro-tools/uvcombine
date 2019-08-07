@@ -315,7 +315,7 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
        Number of pixels in each axes.
     lowresfwhm : float
        Angular resolution of the low resolution image (FWHM)
-    pixscale : float (?)
+    pixscale : quantity (arcsec equivalent)
        pixel size in the input high resolution image.
 
     Return
@@ -340,8 +340,11 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     # constant converting "resolution" in fwhm to sigma
     fwhm = np.sqrt(8*np.log(2))
 
+    if not hasattr(pixscale, 'unit'):
+        pixscale = u.Quantity(pixscale, u.deg)
+
     # sigma in pixels
-    sigma = ((lowresfwhm/fwhm/(pixscale*u.deg)).decompose().value)
+    sigma = ((lowresfwhm/fwhm/(pixscale)).decompose().value)
     # not used, just noted that these are the theoretical values (...maybe...)
     #sigma_fftspace = (1/(4*np.pi**2*sigma**2))**0.5
     #sigma_fftspace = (2*np.pi*sigma)**-1
@@ -1477,7 +1480,7 @@ def feather_compare(hires, lores,
     assert mask.sum() > 0
 
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
-    sclip = stats.sigma_clipped_stats(ratio, sigma=3, iters=5)
+    sclip = stats.sigma_clipped_stats(ratio, sigma=3, maxiters=5)
 
     if doplot:
         import pylab as pl
@@ -1485,7 +1488,7 @@ def feather_compare(hires, lores,
         pl.suptitle("{0} - {1}".format(SAS,LAS))
         pl.subplot(2,2,1)
         pl.plot(np.abs(fft_hi)[mask], np.abs(fft_lo_deconvolved)[mask], '.')
-        mm = [np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()]
+        mm = np.array([np.abs(fft_hi)[mask].min(), np.abs(fft_hi)[mask].max()])
         pl.plot(mm, mm, 'k--')
         pl.plot(mm, mm/sclip[1], 'k:')
         pl.xlabel("High-resolution")
