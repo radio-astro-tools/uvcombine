@@ -382,8 +382,7 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  lowpassfilterSD=False,
        Input images.
     lowpassfilterSD: bool or str
         Re-convolve the SD image with the beam?  If ``True``, the SD image will
-        be weighted by the deconvolved beam.  If ``reconvolve``, will be
-        convolved with the lowresfwhm beam.
+        be weighted by the deconvolved beam.
     replace_hires: Quantity or False
         If set, will simply replace the fourier transform of the single-dish
         data with the fourier transform of the interferometric data above the
