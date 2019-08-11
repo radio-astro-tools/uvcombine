@@ -22,7 +22,7 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
 
     plotnum = 1
     for replace_hires,ls in ((replacement_threshold, '--'),(False,':')):
-        for highpassfilterSD,lw in ((True,2),(False,1)):
+        for lowpassfilterSD,lw in ((True,2),(False,1)):
             for deconvSD,color in ((True,'r'), (False, 'k')):
                 #im_hi = im_interferometered
                 #im_low = singledish_im
@@ -37,17 +37,17 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
                                          im_hi*highresscalefactor,
                                          im_low*lowresscalefactor,
                                          replace_hires=replace_hires,
-                                         highpassfilterSD=highpassfilterSD,
+                                         lowpassfilterSD=lowpassfilterSD,
                                          deconvSD=deconvSD,
                                         )
                 combo = combo.real
-                feathers[replace_hires, highpassfilterSD, deconvSD] = combo
+                feathers[replace_hires, lowpassfilterSD, deconvSD] = combo
                 resid = im-combo
 
 
                 pfreq, ppow = psds.pspec(np.fft.fftshift(np.abs(fftsum)))
                 name = (("Replace < {}; ".format(replace_hires) if replace_hires else "") +
-                        ("filterSD;" if highpassfilterSD else "")+
+                        ("filterSD;" if lowpassfilterSD else "")+
                         ("deconvSD" if deconvSD else ""))
                 if name == "":
                     name = "CASA defaults"

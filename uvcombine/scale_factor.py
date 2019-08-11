@@ -19,7 +19,7 @@ def find_effSDbeam(hires, lores,
                    LAS,
                    lowresfwhms,
                    beam_divide_lores=True,
-                   highpassfilterSD=False,
+                   lowpassfilterSD=False,
                    min_beam_fraction=0.1,
                    alpha=0.85,
                    verbose=False):
@@ -42,7 +42,7 @@ def find_effSDbeam(hires, lores,
         angular unit.
     beam_divide_lores: bool, optional
         See `uvcombine.feather_compare`.
-    highpassfilterSD : bool, optional
+    lowpassfilterSD : bool, optional
         See `uvcombine.fftmerge`.
     min_beam_fraction : float, optional
         See `uvcombine.feather_compare`.
