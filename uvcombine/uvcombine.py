@@ -368,7 +368,7 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
 
 
-def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
+def fftmerge(kfft, ikfft, im_hi, im_lo,  lowpassfilterSD=False,
              replace_hires=False, deconvSD=False, min_beam_fraction=0.1):
     """
     Combine images in the fourier domain, and then output the combined image
@@ -380,7 +380,7 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
        Weighting images.
     im1,im2: float array
        Input images.
-    highpassfilterSD: bool or str
+    lowpassfilterSD: bool or str
         Re-convolve the SD image with the beam?  If ``True``, the SD image will
         be weighted by the deconvolved beam.  If ``reconvolve``, will be
         convolved with the lowresfwhm beam.
@@ -388,7 +388,7 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
         If set, will simply replace the fourier transform of the single-dish
         data with the fourier transform of the interferometric data above the
         specified kernel level.  Can be used in conjunction with either
-        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        ``lowpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
         threshold value; this threshold will be applied to the single-dish
         kernel.
     deconvSD: bool
@@ -411,7 +411,7 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  highpassfilterSD=False,
     fft_lo = np.fft.fft2(np.nan_to_num(im_lo))
 
     # Combine and inverse fourier transform the images
-    if highpassfilterSD:
+    if lowpassfilterSD:
         lo_conv = kfft*fft_lo
     elif deconvSD:
         lo_conv = fft_lo / kfft
@@ -757,7 +757,7 @@ def feather_simple(hires, lores,
                    highresscalefactor=1.0,
                    lowresscalefactor=1.0,
                    lowresfwhm=None,
-                   highpassfilterSD=False,
+                   lowpassfilterSD=False,
                    replace_hires=False,
                    deconvSD=False,
                    return_hdu=False,
@@ -801,7 +801,7 @@ def feather_simple(hires, lores,
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
-    highpassfilterSD: bool or str
+    lowpassfilterSD: bool or str
         Re-convolve the SD image with the beam?  If ``True``, the SD image will
         be weighted by the beam, which effectively means it will be convolved
         with the beam before merging with the interferometer data.  This isn't
@@ -814,7 +814,7 @@ def feather_simple(hires, lores,
         If set, will simply replace the fourier transform of the single-dish
         data with the fourier transform of the interferometric data above the
         specified kernel level.  Can be used in conjunction with either
-        ``highpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
+        ``lowpassfilterSD`` or ``deconvSD``.  Must be set to a floating-point
         threshold value; this threshold will be applied to the single-dish
         kernel.
     deconvSD: bool
@@ -864,7 +864,7 @@ def feather_simple(hires, lores,
     fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
                              im_low*lowresscalefactor,
                              replace_hires=replace_hires,
-                             highpassfilterSD=highpassfilterSD,
+                             lowpassfilterSD=lowpassfilterSD,
                              deconvSD=deconvSD,
                             )
 
@@ -933,7 +933,7 @@ def feather_plot(hires, lores,
                  highresscalefactor=1.0,
                  lowresscalefactor=1.0,
                  lowresfwhm=None,
-                 highpassfilterSD=False,
+                 lowpassfilterSD=False,
                  xaxisunit='arcsec',
                  hires_threshold=None,
                  lores_threshold=None,
@@ -1345,7 +1345,7 @@ def feather_compare(hires, lores,
                     LAS,
                     lowresfwhm,
                     beam_divide_lores=True,
-                    highpassfilterSD=False,
+                    lowpassfilterSD=False,
                     min_beam_fraction=0.1,
                     plot_min_beam_fraction=1e-3,
                     doplot=True,
@@ -1466,7 +1466,7 @@ def feather_compare(hires, lores,
 
 def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
                                    beam_divide_lores=True,
-                                   highpassfilterSD=False,
+                                   lowpassfilterSD=False,
                                    min_beam_fraction=0.1,
                                    plot_min_beam_fraction=1e-3, doplot=True,):
     """
