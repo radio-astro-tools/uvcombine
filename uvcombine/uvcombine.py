@@ -14,6 +14,7 @@ from spectral_cube import wcs_utils
 from astropy.io import fits
 from astropy import units as u
 from astropy import log
+from astropy.convolution import convolve, Gaussian2DKernel
 from astropy.utils.console import ProgressBar
 import numpy as np
 import FITS_tools
@@ -302,6 +303,52 @@ def flux_match(fft1, fft2):
     return fft1
 
 
+def color_correction_factors(n_center_hi, n_center_lo, pb_hi, pb_lo, alpha):
+    """
+    Calculate the color correction factors for the input images before combination.
+    This is to account for different nominal center frequency for different instruments, as 
+    well as different flux calibration process.
+    
+    Parameters
+    ----------
+    n_center_hi:
+       The nominal frequency center of high resolution image (GHz). 
+       This is the default frequency center of the output correction factors.
+    n_center_lo:
+       The nominal frequency center of high resolution image (GHz).
+    pb_hi:
+       The passband curve of high resolution observation (in ../filter/**).
+    pb_lo:
+       The passband curve of low resolution observation.
+    alpha:
+       The assumed spetra index of source emission. 
+     
+    Return
+    ------------
+    cc_hi:
+       Color correction factor for the high resolution image.
+    cc_lo:
+       Color correction factor for the low resolution image.
+    """
+    wv_hi, response_hi = pb_hi
+    wv_lo, response_lo = pb_lo
+    freq_hi = (wv_hi*u.um).to(u.GHz,equivalencies=u.spectral()).value
+    freq_lo = (wv_lo*u.um).to(u.GHz,equivalencies=u.spectral()).value
+    
+    #calculate the color corrections according to assumed source index
+    #here the default calibration for space telescope is Inum*num=const, for ground-based observations is Inum \propto num**2.
+    cc_hi = np.trapz(response_hi*(freq_hi/n_center_hi)**2, freq_hi)/np.trapz(response_hi*(freq_hi/n_center_hi)**alpha, freq_hi)
+    cc_lo = np.trapz(response_lo*(freq_lo/n_center_lo)**(-1), freq_lo)/np.trapz(response_lo*(freq_lo/n_center_lo)**alpha, freq_lo)
+    
+    #calculate the color correction for low resolution image to nominal frequency of high resolution image
+    cc_lo = cc_lo*(n_center_hi/n_center_lo)**alpha
+    
+    
+    return cc_hi, cc_lo
+
+    
+    
+
 
 def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     """
@@ -441,7 +488,7 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  lowpassfilterSD=False,
 
 
 
-def smoothing(combo, targres):
+def smoothing(combo, targres, origfwhm, pixscale):
     """
     Smooth the image to the targeted final angular resolution.
 
@@ -451,8 +498,24 @@ def smoothing(combo, targres):
        Combined image
     targres : float
        The HPBW of the smoothed image (in units of arcsecond)
-    """
+    origfwhm : float
+       The original HPBW of input image (in units of arcsecond)
+    pixscale : float
+       The pixscale of the input image (in units of arcsecond)
 
+    Returns
+    -------
+    combo : float array
+       Smoothed image
+    """
+    fwhm = np.sqrt(8*np.log(2))
+    kernel_size = ((targres/fwhm)**2-(hiresfwhm/fwhm)**2)**0.5
+    pixel_n = kernel_size/pixscale
+    
+    #smooth the image using gaussian 2d kernel
+    gauss_kernel = Gaussian2DKernel(pixel_n)
+    combo = convolve(combo, gauss_kernel,normalize_kernel=True)
+    
     return combo
 
 
@@ -584,7 +647,10 @@ def AKB_interpol(lores1, lores2, hires,
     # Here need to reead the header of the low resolution image,
     # to know what is the targeted resolution
     targres = 0.0
-    im1 = smoothing(im1, targres)
+    origfwhm =  0.0
+    pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
+
+    im1 = smoothing(im1, targres, origfwhm, pixscale)
 
     #* Image Registration (Match astrometry)
     #  [Should be an optional step]
@@ -681,7 +747,7 @@ def AKB_combine(hires, lores,
     #* Final Smoothing
     # [should be an optional step]
     if (targres > 0.0):
-        combo = smoothing(combo, targres)
+        combo = smoothing(combo, targres, origfwhm, pixscale)
 
     #* generate amplitude plot and PDF output
     akb_plot(fft1, fft2, fftsum)
