@@ -432,7 +432,7 @@ def feather_simple_cube(hires, lores, **kwargs):
         feath = feather_simple(hslc.hdu, lslc.hdu)
         feathcube.append(feath)
 
-    newcube = SpectralCube(data=np.array(feathcube), header=hires.header,
+    newcube = SpectralCube(data=np.array(feathcube).real, header=hires.header,
             wcs=hires.wcs)
 
     return newcube
