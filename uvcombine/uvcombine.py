@@ -412,6 +412,27 @@ def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
 
     return umask_hi
 
+def feather_simple_cube(hires, lores, **kwargs):
+    """
+    Parameters
+    ----------
+    hires : cube
+    lores : cube
+
+    TODO:
+
+      * Can we paralellize, daskify, or otherwise not-in-memory-ify this?
+    """
+    feathcube = []
+    for hslc, lslc in zip(hires, lores):
+        feath = feather_simple(hslc.hdu, lslc.hdu)
+        feathcube.append(feath)
+
+    newcube = SpectralCube(data=np.array(feathcube), header=hires.header,
+            wcs=hires.wcs)
+
+    return newcube
+
 
 def feather_simple(hires, lores,
                    highresextnum=0,
