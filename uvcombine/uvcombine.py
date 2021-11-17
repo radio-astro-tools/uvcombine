@@ -423,6 +423,10 @@ def feather_simple_cube(hires, lores, **kwargs):
 
       * Can we paralellize, daskify, or otherwise not-in-memory-ify this?
     """
+
+    if lores.shape[0]!=hires.shape[0] or not all(lores.spectral_axis == hires.spectral_axis):
+        lores = lores.spectral_interpolate(hires.spectral_axis)
+
     feathcube = []
     for hslc, lslc in zip(hires, lores):
         feath = feather_simple(hslc.hdu, lslc.hdu)
