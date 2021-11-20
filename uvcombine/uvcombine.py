@@ -16,9 +16,6 @@ from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-import FITS_tools
-#from FITS_tools.hcongrid import hcongrid_hdu
-#from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import wcs,stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
@@ -909,6 +906,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     cube_ds_hdu : fits.PrimaryHDU
         An HDU containing the output cube in FITS HDU form
     """
+    import FITS_tools
 
     kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
 
@@ -980,6 +978,8 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     return_regridded_cube_lo : bool
         Return the 2nd cube regridded into the pixel space of the first?
     """
+    import FITS_tools
+
     if isinstance(cube_hi, str):
         cube_hi = SpectralCube.read(cube_hi)
     if isinstance(cube_lo, str):
