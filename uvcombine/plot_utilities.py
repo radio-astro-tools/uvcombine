@@ -1,5 +1,5 @@
 import numpy as np
-from .uvcombine import fftmerge, feather_kernel
+from . import fftmerge, feather_kernel
 from turbustat.statistics import psds
 import pylab as pl
 

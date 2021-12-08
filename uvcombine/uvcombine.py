@@ -48,7 +48,6 @@ def file_in(filename, extnum=0):
         hdu = fits.open(filename)[extnum]
 
     im = hdu.data.squeeze()
-    #header = FITS_tools.strip_headers.flatten_header(hdu.header)
     header = wcs_utils.strip_wcs_from_header(hdu.header)
     mywcs = wcs.WCS(hdu.header).celestial
     header.update(mywcs.to_header())
@@ -203,13 +202,19 @@ def regrid(hd1, im1, im2raw, hd2):
     """
 
     # Sanity Checks:
-    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension != 2.'
-    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension != to 2.'
+    if hd2['NAXIS'] != 2 or im2raw.ndim != 2:
+        raise ValueError('im2raw must be a 2D image.')
+    if hd1['NAXIS'] != 2 or im1.ndim != 2:
+        raise ValueError('im1 must be a 2D image.')
 
     # read pixel scale from the header of high resolution image
-    #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
-    #pixscale = wcs.utils.proj_plane_pixel_scales(wcs.WCS(hd1))[0]
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(hd1))**0.5
+    wcs_hi = wcs.WCS(hd1)
+
+    if wcs.utils.is_proj_plane_distorted(wcs_hi.celestial):
+        raise ValueError("`fourier_combine_cubes` requires the input"
+                         "images to have square pixels.")
+
+    pixscale = wcs_hi.celestial.proj_plane_pixel_scales()[0]
     log.debug('pixscale = {0} deg'.format(pixscale))
 
     # read the image array size from the high resolution image
@@ -978,7 +983,6 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     return_regridded_cube_lo : bool
         Return the 2nd cube regridded into the pixel space of the first?
     """
-    import FITS_tools
 
     if isinstance(cube_hi, str):
         cube_hi = SpectralCube.read(cube_hi)
@@ -993,7 +997,12 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     hd_hi = cube_hi.header
     assert hd_hi['NAXIS'] == im_hi.ndim == 3
     wcs_hi = cube_hi.wcs
-    pixscale = FITS_tools.header_tools.header_to_platescale(hd_hi)
+
+    if wcs.utils.is_proj_plane_distorted(cube_hi.wcs.celestial):
+        raise ValueError("`fourier_combine_cubes` requires the input"
+                         "images to have square pixels.")
+
+    pixscale = cube_hi.wcs.celestial.proj_plane_pixel_scales()[0]
 
     cube_lo = cube_lo.to(cube_hi.unit)
 
@@ -1007,7 +1016,6 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     # new version, using reproject & spectral-cube
     cube_lo_rg = cube_lo.reproject(hd_hi)
     fitshdu_low = cube_lo_rg.hdu
-    #w2 = wcs.WCS(fitshdu_low.header)
 
     nax1,nax2 = (hd_hi['NAXIS1'],
                  hd_hi['NAXIS2'],
