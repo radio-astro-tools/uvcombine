@@ -9,7 +9,7 @@ Code for fourier-space combination of single dish and interferometer data
 """
 import radio_beam
 from reproject import reproject_interp
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube, Projection
 from spectral_cube import wcs_utils
 from astropy.io import fits
 from astropy import units as u
@@ -375,15 +375,20 @@ def simple_deconvolve_sdim(hdu, lowresfwhm, minval=1e-1):
 
     This is not a generally useful method!
     """
-    hdu_low, im_lowraw, header_low = file_in(hdu)
-    nax2,nax1 = im_lowraw.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_low))**0.5
+    proj = Projection.from_hdu(hdu)
+
+    nax2, nax1 = proj.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
-    fft_lo = (np.fft.fft2(np.nan_to_num(im_lowraw)))
+    fft_lo = (np.fft.fft2(np.nan_to_num(proj.value)))
+
+    # Divide by the SD beam in Fourier space.
     decfft_lo = fft_lo.copy()
     decfft_lo[kfft > minval] = (fft_lo / kfft)[kfft > minval]
     dec_lo = np.fft.ifft2(decfft_lo)
+
     return dec_lo
 
 
@@ -392,16 +397,19 @@ def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
     Like simple_deconvolve_sdim, try unsharp masking by convolving
     with (1-kfft) in the fourier domain
     """
-    hdu_high, im_highraw, header_high = file_in(hdu)
-    nax2,nax1 = im_highraw.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_high))**0.5
+    proj = Projection.from_hdu(hdu)
+
+    nax2, nax1 = proj.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
-    fft_hi = (np.fft.fft2(np.nan_to_num(im_highraw)))
+    fft_hi = (np.fft.fft2(np.nan_to_num(proj.value)))
     #umaskfft_hi = fft_hi.copy()
     #umaskfft_hi[ikfft < minval] = (fft_hi * ikfft)[ikfft < minval]
     umaskfft_hi = fft_hi * ikfft
     umask_hi = np.fft.ifft2(umaskfft_hi)
+
     return umask_hi
 
 
@@ -510,24 +518,28 @@ def feather_simple(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    hdu_hi, im_hi, header_hi = file_in(hires, highresextnum)
-    hdu_low, im_lowraw, header_low = file_in(lores, lowresextnum)
+
+    hdu_hi = fits.open(hires)[highresextnum]
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    hdu_lo = fits.open(lores)[lowresextnum]
+    proj_lo = Projection.from_hdu(hdu_lo)
 
     if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        beam_low = proj_lo.beam
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
-        if not weights.shape == im_hi.shape:
+        if not weights.shape == proj_hi.shape:
             raise ValueError("weights must be an array with the same shape as"
                              " the high-res data.")
     else:
         weights = 1.
 
     if pbresponse is not None:
-        if not pbresponse.shape == im_hi.shape:
+        if not pbresponse.shape == proj_hi.shape:
             raise ValueError("pbresponse must be an array with the same"
                              " shape as the high-res data.")
 
@@ -536,14 +548,15 @@ def feather_simple(hires, lores,
         # unit equivalent to that specified in the high-resolution header's units
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
+        im_lowraw, header_low = match_flux_units(image=proj_lo.value,
+                                                 image_header=proj_lo.header.copy(),
+                                                 target_header=proj_hi.header)
+        proj_lo = Projection(im_lowraw, header=header_low)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
-                                                   im1=im_hi,
-                                                   im2raw=im_lowraw,
-                                                   hd2=header_low)
+    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=proj_hi.header,
+                                                   im1=proj_hi.value,
+                                                   im2raw=proj_lo.value,
+                                                   hd2=proj_lo.header)
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
@@ -552,25 +565,26 @@ def feather_simple(hires, lores,
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft,
-                             im_hi * highresscalefactor * weights,
+                             proj_hi.value * highresscalefactor * weights,
                              im_low * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              lowpassfilterSD=lowpassfilterSD,
                              deconvSD=deconvSD,
                              )
 
-    # Divide by the
+    # Divide by the PB response
     if pbresponse is not None:
         combo /= pbresponse
 
     if return_hdu:
-        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
+        combo_hdu = fits.PrimaryHDU(data=combo.real, header=proj_hi.header)
         combo = combo_hdu
 
     if return_regridded_lores:
         return combo, hdu_low
     else:
         return combo
+
 
 def linear_combine(hires, lores,
                    highresextnum=0,
