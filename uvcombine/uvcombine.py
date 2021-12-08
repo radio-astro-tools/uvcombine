@@ -1143,7 +1143,10 @@ def feather_compare(hires, lores,
     fft_lo_deconvolved[below_beamscale_plotting] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
-    assert mask.sum() > 0
+
+    if mask.sum() == 0:
+        raise ValueError("No valid uv-overlap region found. Check the inputs for "
+                         "SAS and LAS.")
 
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
     sclip = stats.sigma_clipped_stats(ratio, sigma=3, maxiters=5)
@@ -1231,7 +1234,9 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
         intensity over that range.  The weighting is necessary to avoid errors
         introduced by the fact that these images are forced to have zero means.
     """
-    assert LAS > SAS
+    if LAS <= SAS:
+        raise ValueError("Must have LAS > SAS. Check the input parameters.")
+
     hdu_hi, im_hi, header_hi = file_in(hires)
     hdu_low, im_lowraw, header_low = file_in(lores)
 
@@ -1258,7 +1263,9 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     fft_lo_deconvolved[below_beamscale_plotting] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
-    assert mask.sum() > 0
+    if mask.sum() == 0:
+        raise ValueError("No valid uv-overlap region found. Check the inputs for "
+                         "SAS and LAS.")
 
     hi_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_hi*mask)))
     lo_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_lo*mask)))
