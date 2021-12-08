@@ -170,7 +170,7 @@ def match_flux_units(image, image_header, target_header):
 
     return image, image_header
 
-
+@deprecated("2021", message="Use Projection.reproject (2D).")
 def regrid(hd1, im1, im2raw, hd2):
     """
     Regrid the low resolution image to have the same dimension and pixel size with the
@@ -548,20 +548,16 @@ def feather_simple(hires, lores,
         # unit equivalent to that specified in the high-resolution header's units
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=proj_lo.value,
-                                                 image_header=proj_lo.header.copy(),
-                                                 target_header=proj_hi.header)
-        proj_lo = Projection(im_lowraw, header=header_low)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=proj_hi.header,
-                                                   im1=proj_hi.value,
-                                                   im2raw=proj_lo.value,
-                                                   hd2=proj_lo.header)
+        proj_lo = proj_lo.to(proj_hi.unit)
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
-        im_low *= pbresponse
+        proj_lo_regrid *= pbresponse
 
+    nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft,
@@ -581,58 +577,7 @@ def feather_simple(hires, lores,
         combo = combo_hdu
 
     if return_regridded_lores:
-        return combo, hdu_low
-    else:
-        return combo
-
-
-def linear_combine(hires, lores,
-                   highresextnum=0,
-                   lowresextnum=0,
-                   highresscalefactor=1.0,
-                   lowresscalefactor=1.0,
-                   lowresfwhm=None,
-                   return_hdu=False,
-                   return_regridded_lores=False,
-                   match_units=True,
-                   convolve=convolve_fft,
-                  ):
-    """
-    Implement a simple linear combination following Faridani et al 2017
-    """
-
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
-
-    if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
-        lowresfwhm = beam_low.major
-        log.info("Low-res FWHM: {0}".format(lowresfwhm))
-
-    if match_units:
-        # After this step, the units of im_hi are some sort of surface brightness
-        # unit equivalent to that specified in the high-resolution header's units
-        # Note that this step does NOT preserve the values of im_lowraw and
-        # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
-
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
-                                                   im1=im_hi,
-                                                   im2raw=im_lowraw,
-                                                   hd2=header_low)
-
-    missing_flux = im_low - convolve(im_hi, beam_low.as_kernel(pixscale))
-
-    combo = missing_flux + im_hi
-
-    if return_hdu:
-        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
-        combo = combo_hdu
-
-    if return_regridded_lores:
-        return combo, hdu_low
+        return combo, proj_lo
     else:
         return combo
 
@@ -690,8 +635,14 @@ def feather_plot(hires, lores,
         (optional) the image encased in a FITS HDU with the relevant header
     """
     import image_tools
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    proj_lo = Projection.from_hdu(hdu_lo)
 
     print("featherplot")
     pb = ProgressBar(13)
@@ -701,20 +652,22 @@ def feather_plot(hires, lores,
         # unit equivalent to that specified in the high-resolution header's units
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
+        proj_lo = proj_lo.to(proj_hi.unit)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
     pb.update()
 
     if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        beam_low = proj_lo.beam
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+
+    nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
     log.debug("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
     print("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
     pb.update()
@@ -724,16 +677,16 @@ def feather_plot(hires, lores,
     pb.update()
 
     if hires_threshold is None:
-        fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+        fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi.value * highresscalefactor)))
     else:
-        hires_tofft = np.nan_to_num(im_hi*highresscalefactor)
+        hires_tofft = np.nan_to_num(proj_hi.value * highresscalefactor)
         hires_tofft[hires_tofft < hires_threshold] = 0
         fft_hi = np.fft.fftshift(np.fft.fft2(hires_tofft))
     pb.update()
     if lores_threshold is None:
-        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo.value * lowresscalefactor)))
     else:
-        lores_tofft = np.nan_to_num(im_low*lowresscalefactor)
+        lores_tofft = np.nan_to_num(proj_lo.value * lowresscalefactor)
         lores_tofft[lores_tofft < lores_threshold] = 0
         fft_lo = np.fft.fftshift(np.fft.fft2(lores_tofft))
     pb.update()
@@ -1065,6 +1018,8 @@ def feather_compare(hires, lores,
                     SAS,
                     LAS,
                     lowresfwhm,
+                    highresextnum=0,
+                    lowresextnum=0,
                     beam_divide_lores=True,
                     lowpassfilterSD=False,
                     min_beam_fraction=0.1,
@@ -1121,21 +1076,33 @@ def feather_compare(hires, lores,
         stats are included.
 
     """
-    assert LAS > SAS
+    if LAS <= SAS:
+        raise ValueError("Must have LAS > SAS. Check the input parameters.")
 
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    else:
+        hdu_hi = hires
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    else:
+        hdu_lo = lores
+    proj_lo = Projection.from_hdu(hdu_lo)
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
-        if not weights.shape == im_hi.shape:
+        if not weights.shape == proj_hi.shape:
             raise ValueError("weights must be an array with the same shape as"
                              " the high-res data.")
     else:
         weights = 1.
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
+    nax2, nax1 = proj_hi.shape
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1143,10 +1110,10 @@ def feather_compare(hires, lores,
 
     yy,xx = np.indices([nax2, nax1])
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
-    angscales = nax1/rr * pixscale*u.deg
+    angscales = nax1/rr * pixscale * u.deg
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi * weights)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low * weights)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi * weights)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid * weights)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
@@ -1251,11 +1218,22 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     if LAS <= SAS:
         raise ValueError("Must have LAS > SAS. Check the input parameters.")
 
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    else:
+        hdu_hi = hires
+    proj_hi = Projection.from_hdu(hdu_hi)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    else:
+        hdu_lo = lores
+    proj_lo = Projection.from_hdu(hdu_lo)
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
+    nax2, nax1 = proj_hi.shape
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1265,8 +1243,8 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
     angscales = nax1/rr * pixscale*u.deg
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
