@@ -3,7 +3,6 @@ import pylab as pl
 from astropy import units as u
 from astropy.io import fits
 from astropy.convolution import convolve_fft, Gaussian2DKernel
-import uvcombine
 import radio_beam
 from astropy import wcs
 
