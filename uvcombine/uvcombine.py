@@ -1104,7 +1104,7 @@ def feather_compare(hires, lores,
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     nax2, nax1 = proj_hi.shape
-    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    pixscale = np.abs(proj_hi.wcs.celestial.proj_plane_pixel_scales()[0])
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1112,7 +1112,7 @@ def feather_compare(hires, lores,
 
     yy,xx = np.indices([nax2, nax1])
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
-    angscales = nax1/rr * pixscale * u.deg
+    angscales = nax1/rr * pixscale
 
     fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi * weights)))
     fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid * weights)))
