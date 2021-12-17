@@ -2,6 +2,7 @@ from astropy import convolution
 from astropy.io import fits
 from astropy import units as u
 import numpy as np
+from spectral_cube import SpectralCube
 
 
 from ..uvcombine import feather_compare
@@ -38,7 +39,7 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
     if with_specaxis:
         header['CRVAL3'] = restfreq.to(u.Hz).value
         header['CUNIT3'] = 'Hz'
-        header['CDELT3'] = 1e6,  # 1 MHz; doesn't matter
+        header['CDELT3'] = 1e6  # 1 MHz; doesn't matter
         header['CRPIX3'] = 1
         header['CTYPE3'] = 'FREQ'
         header['RESTFRQ'] = restfreq.to(u.Hz).value
@@ -222,3 +223,62 @@ def testing_data(return_images=True,
     lowres_pts = lowres_pts[good_pts]
 
     return angscales, ratios, lowres_pts, highres_pts
+
+
+def testing_data_cube(return_hdu=False,
+                      powerlawindex=1.5,
+                      largest_scale=56. * u.arcsec,
+                      smallest_scale=3. * u.arcsec,
+                      lowresfwhm=30. * u.arcsec,
+                      pixel_scale=1 * u.arcsec,
+                      imsize=512,
+                      nchan=3):
+    '''
+    '''
+
+    restfreq = (2 * u.mm).to(u.GHz, u.spectral())
+
+    channels = []
+    channels_sd = []
+    channels_interf = []
+    for i in range(nchan):
+        chan = generate_test_data(imsize, powerlawindex, seed=67848923)
+
+        sd_img = singledish_observe_image(chan, pixel_scale, lowresfwhm)
+
+        interf_img = \
+            interferometrically_observe_image(chan, pixel_scale,
+                                            largest_scale,
+                                            smallest_scale)[0].real
+
+        channels.append(chan)
+        channels_sd.append(sd_img)
+        channels_interf.append(interf_img)
+
+    orig_cube = np.array(channels)
+    sd_cube = np.array(channels_sd)
+    interf_cube = np.array(channels_interf)
+
+    # Make these FITS HDUs
+    orig_hdr = generate_header(pixel_scale, pixel_scale, imsize,
+                               restfreq, with_specaxis=True)
+    orig_hdu = fits.PrimaryHDU(orig_cube, header=orig_hdr)
+
+    sd_hdr = generate_header(pixel_scale, lowresfwhm, imsize,
+                             restfreq, with_specaxis=True)
+    sd_hdu = fits.PrimaryHDU(sd_cube, header=sd_hdr)
+
+    interf_hdr = generate_header(pixel_scale, smallest_scale, imsize,
+                                 restfreq, with_specaxis=True)
+    interf_hdu = fits.PrimaryHDU(interf_cube, header=interf_hdr)
+
+    if return_hdu:
+        return orig_hdu, sd_hdu, interf_hdu
+    else:
+        # Return as spectral-cubes
+
+        orig_sc = SpectralCube.read(orig_hdu)
+        sd_sc = SpectralCube.read(sd_hdu)
+        interf_sc = SpectralCube.read(interf_hdu)
+
+        return orig_sc, sd_sc, interf_sc
