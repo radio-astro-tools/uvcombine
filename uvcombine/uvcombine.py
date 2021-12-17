@@ -940,7 +940,7 @@ def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
                           return_regridded_cube_lo=False,
-                          return_hdu=False,
+                          return_hdu=True,
                           maximum_cube_size=1e8,
                          ):
     """
