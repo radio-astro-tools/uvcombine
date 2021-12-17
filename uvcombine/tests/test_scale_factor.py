@@ -5,7 +5,7 @@ from astropy.io import fits
 import numpy.testing as npt
 import numpy as np
 
-from .utils import test_data
+from .utils import testing_data
 from ..scale_factor import find_effSDbeam, find_scale_factor
 
 try:
@@ -62,19 +62,37 @@ def test_scale_factor_sigclip():
 
 
 def test_SDeff_beam():
-    orig_hdu, lowres_hdu, highres_hdu = \
-        test_data(return_images=True)
+
+    largest_scale = 56 * u.arcsec
+    lowresfwhm = 30.*u.arcsec
+
+    orig_hdu, lowres_hdu, highres_hdu = testing_data(return_images=True,
+                                                powerlawindex=1.5,
+                                                largest_scale=largest_scale,
+                                                smallest_scale=3.*u.arcsec,
+                                                lowresfwhm=lowresfwhm,
+                                                pixel_scale=1*u.arcsec)
 
     lowresfwhms = np.arange(20, 40, 2) * u.arcsec
 
     slopes, slopes_CI = \
-        find_effSDbeam(highres_hdu, lowres_hdu, 56 * u.arcsec,
+        find_effSDbeam(highres_hdu, lowres_hdu, largest_scale,
                        lowresfwhms,
                        beam_divide_lores=True,
-                       highpassfilterSD=False,
+                       lowpassfilterSD=False,
                        min_beam_fraction=0.1,
                        alpha=0.85,
                        verbose=True)
 
     # Smallest slope should be the actual FWHM of 30''
-    assert lowresfwhms[np.argmin(np.abs(slopes))].value == 30
+    # However, there's some uncertainty to deal with and there's a quadratic
+    # behaviour if the SD beam size is overestimated by ~>40%.
+    # Because of this, we check for the smallest negative value within 1-sigma uncertainty
+    # of slope=0.
+    estimated_lowresfwhm = lowresfwhms[np.where(slopes_CI[1] >= 0.)][0]
+    assert estimated_lowresfwhm == lowresfwhm
+
+    # See note above. This check can fail due to the quadratic behaviour for too
+    # large lowresfwhms
+    # assert lowresfwhms[np.argmin(np.abs(slopes))].value == lowresfwhm.value
+

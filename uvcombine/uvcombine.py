@@ -1,27 +1,19 @@
-"""
-Code for fourier-space combination of single dish and interferometer data
-(or zero-spacing and non-zero-spacing data).  See:
 
-    Stanimirovic et al 1999 (http://esoads.eso.org/abs/1999MNRAS.302..417S)
-    (compares single-dish and interferometer data over commonly sampled
-    UV space, but then does image combination + image-space deconvolution,
-    which is not performed here)
-"""
 import radio_beam
 from reproject import reproject_interp
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube, Projection
 from spectral_cube import wcs_utils
 from astropy.io import fits
 from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-import FITS_tools
-#from FITS_tools.hcongrid import hcongrid_hdu
-#from FITS_tools.cube_regrid import regrid_cube_hdu
 from astropy import wcs,stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
+from astropy.utils import deprecated
 
+
+@deprecated("2021")
 def file_in(filename, extnum=0):
     """
     Take the input files. If input is already HDU, then return it.
@@ -49,7 +41,6 @@ def file_in(filename, extnum=0):
         hdu = fits.open(filename)[extnum]
 
     im = hdu.data.squeeze()
-    #header = FITS_tools.strip_headers.flatten_header(hdu.header)
     header = wcs_utils.strip_wcs_from_header(hdu.header)
     mywcs = wcs.WCS(hdu.header).celestial
     header.update(mywcs.to_header())
@@ -70,6 +61,10 @@ def file_in(filename, extnum=0):
     return hdu, im, header
 
 
+# NOTE: this SHOULD work for all 2D images in brightness units.
+# Hybrid integrated moment maps will not (and I don't think that's a realistic use
+# case).
+@deprecated("2021", message='Use Projection.to for unit conversion.')
 def match_flux_units(image, image_header, target_header):
     """
     Match the flux units of the input image to the target header.  There are
@@ -172,26 +167,7 @@ def match_flux_units(image, image_header, target_header):
 
     return image, image_header
 
-
-
-def flux_unit(image, header):
-    """
-    Convert all possible units to un-ambiguous unit like Jy/pixel or Jy/arcsec^2.
-
-    Parameter/Return
-    ----------------
-    image : (float point?) array
-       The input image with arbitrary flux unit (e.g. Jy/beam).
-       Get converted to Jy/arcsec^2 units in output.
-    header : header object
-       Header of the input/output image
-    """
-    raise NotImplementedError
-
-    return image, header
-
-
-
+@deprecated("2021", message="Use Projection.reproject (2D).")
 def regrid(hd1, im1, im2raw, hd2):
     """
     Regrid the low resolution image to have the same dimension and pixel size with the
@@ -223,13 +199,19 @@ def regrid(hd1, im1, im2raw, hd2):
     """
 
     # Sanity Checks:
-    assert hd2['NAXIS'] == im2raw.ndim == 2, 'Error: Input lores image dimension != 2.'
-    assert hd1['NAXIS'] == im1.ndim == 2, 'Error: Input hires image dimension != to 2.'
+    if hd2['NAXIS'] != 2 or im2raw.ndim != 2:
+        raise ValueError('im2raw must be a 2D image.')
+    if hd1['NAXIS'] != 2 or im1.ndim != 2:
+        raise ValueError('im1 must be a 2D image.')
 
     # read pixel scale from the header of high resolution image
-    #pixscale = FITS_tools.header_tools.header_to_platescale(hd1)
-    #pixscale = wcs.utils.proj_plane_pixel_scales(wcs.WCS(hd1))[0]
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(hd1))**0.5
+    wcs_hi = wcs.WCS(hd1)
+
+    if wcs.utils.is_proj_plane_distorted(wcs_hi.celestial):
+        raise ValueError("`fourier_combine_cubes` requires the input"
+                         "images to have square pixels.")
+
+    pixscale = wcs_hi.celestial.proj_plane_pixel_scales()[0]
     log.debug('pixscale = {0} deg'.format(pixscale))
 
     # read the image array size from the high resolution image
@@ -250,57 +232,6 @@ def regrid(hd1, im1, im2raw, hd2):
 
     # return variables
     return rhdu, im2, nax1, nax2, pixscale
-
-
-
-def pbcorr(fft2, hd1, hd2):
-    """
-    Divide the fourier transformed low resolution image with its fourier
-    transformed primary beam, and then times the fourier transformed primary
-    beam of the high resolution image.
-
-    Parameters
-    ----------
-    fft2 : float array
-       Fourier transformed low resolution image
-    hd1 : header object
-       Header of the high resolution image
-    hd2 : header object
-       Header of the low resolution image
-
-    Returns
-    -------
-    fft2 : float array
-       Fourier transformed low resolution image, after corrected for the primary beam effect
-    """
-
-    return fft2
-
-
-
-def flux_match(fft1, fft2):
-    """
-    Scale the flux level of the high resolution image, based on the flux level of the low
-    resolution image. This is because we probably trust the flux scale from the space better,
-    given that is it not affected by the atmospheric effects and the related calibrations.
-    This also maintain a consistency if we want to incorporate more bands from the space
-    observatory for science analysis.
-
-    Parameters
-    ----------
-    fft1 : float array
-       Fourier transformed high resolution image
-    fft2 : float array
-       Fourier transformed low resolution image
-
-    Return
-    -----------
-    fft1 : float array
-       Fourier transformed low resolution image after flux rescaling.
-    """
-
-    return fft1
-
 
 
 def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
@@ -326,12 +257,6 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
        An image array containing the weighting for the high resolution image
        (simply 1-kfft)
     """
-    # note for Baobab:
-    # pixel indices 1 and -1 correspond to a sine with period equal to the full
-    # image size
-    # pixel index 0 corresponds to the zero-spacing, i.e. the mean of the image
-
-
     # Construct arrays which hold the x and y coordinates (in unit of pixels)
     # of the image
     ygrid,xgrid = (np.indices([nax2,nax1]) -
@@ -365,7 +290,6 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     ikfft = 1-kfft
 
     return kfft, ikfft
-
 
 
 def fftmerge(kfft, ikfft, im_hi, im_lo,  lowpassfilterSD=False,
@@ -440,278 +364,6 @@ def fftmerge(kfft, ikfft, im_hi, im_lo,  lowpassfilterSD=False,
     return fftsum, combo
 
 
-
-def smoothing(combo, targres):
-    """
-    Smooth the image to the targeted final angular resolution.
-
-    Parameters
-    ----------
-    combo : float array
-       Combined image
-    targres : float
-       The HPBW of the smoothed image (in units of arcsecond)
-    """
-
-    return combo
-
-
-
-def akb_plot(fft1, fft2, fftsum, outname="akb_combine.pdf"):
-    """
-    Generate plots for examining the combined results in fourier domain.
-
-    Parameters
-    ----------
-    fft1 : float array
-       Fourier transformed high resolution image
-    fft2 : float array
-       Fourier transformed low resolution image
-    fftsum : float array
-       Fourier transformed combined image
-    """
-    return
-
-
-def casaheader(header):
-    """
-    Generate the header which is compatible with CASA.
-
-    Parameters
-    ----------
-    header : header object
-       The header of the high resolution image.
-
-    Return
-    combo_header : header object
-       The generated CASA compatible header
-    """
-    combo_header = header
-    return combo_header
-
-
-
-def outfits(image, header, outname="output.fits"):
-    """
-    Output .fits format image.
-
-    Parameters
-    ----------
-    image : (float point?) array
-       The combined image
-    header : header object
-       Header of the combined image
-    outname : str
-       Filename of the .fits output of the combined image
-    """
-    hdu = fits.PrimaryHDU(data=np.abs(image), header=header)
-    hdu.writeto(outname)
-
-
-
-def freq_filling(im1, im2, hd1, hd2, hd3):
-    """
-    Derive spectral index from image array, and make interpolation.
-
-    Parameters
-    ----------
-    im1,im2  : float array
-       The input images to be interpolated
-    hd1, hd2 : header object
-       Headers of the input images
-    hd3      : header object
-       Header for extracting the targeted frequency for interpolation
-    """
-    interpol = im1
-    interpol_header = hd1
-    interpol_hdu = fits.PrimaryHDU(data=np.abs(im1), header=hd1)
-
-    return interpol, interpol_header, interpol_hdu
-
-
-
-#################################################################
-
-def AKB_interpol(lores1, lores2, hires,
-                 extnum1=0,
-                 extnum2=0,
-                 hiresextnum=0,
-                 scalefactor1=1.0,
-                 scalefactor2=1.0,
-                 output_fits=True,
-                 outfitsname='interpolate.fits'):
-    """
-    This procedure is provided for the case that we need to interpolate
-    two space observatory image, to make the image at the observing
-    frequency of the ground based one.
-
-    Parameter
-    ---------
-    lores1, lores2 : str
-       Filaname of the input images, either variable name of HDUs, or
-       can be the .fits format files. lores2 should be at the lower observing
-       frequency.
-    hires : str
-       Filaname of the groundbased observing image. This is to supply header
-       for obtaining the targeted frequency for interpolation.
-    extnum1,2 : int
-       The extension number to use from the low-res FITS file
-    hiresextnum : int
-       The extension number to use from the hi-res FITS file
-    scalefactor1,2 : float
-       scaling factors of the input images.
-    fitsoutput     : bool
-       Option to set whether we have .fits output
-    outfitsname    : str
-       The filename of .fits output.
-
-    Return
-    ---------
-    lores : HDU object
-       The interpolated image.
-    """
-
-    # Read images
-    hdu1, im1, hd1 = file_in(lores1, extnum1)
-    hdu2, im2, hd2 = file_in(lores2, extnum2)
-    hdu3, im3, hd3 = file_in(hires, hiresextnum)
-
-    # Match flux unit
-    im1, hd1 = flux_unit(im1, hd1)
-    im2, hd2 = flux_unit(im2, hd2)
-
-    # Smooth the high resolution image to the low resolution one
-    # Here need to reead the header of the low resolution image,
-    # to know what is the targeted resolution
-    targres = 0.0
-    im1 = smoothing(im1, targres)
-
-    #* Image Registration (Match astrometry)
-    #  [Should be an optional step]
-    #  The initial offsets between images should not be too big. Otherwise
-    #  the correlation might be trapped to a local maximum.
-    # Package exist, but not sure how to use it.
-
-    # Derive Spectral index and Make interpolation
-    interpol, interpol_header, interpol_hdu = freq_filling(im1, im2, hd1, hd2, hd3)
-
-    # output .fits file
-    if output_fits:
-        outfits(interpol, interpol_header, outname=outfitsname)
-
-    # return hdu
-    return interpol_hdu
-
-#################################################################
-
-def AKB_combine(hires, lores,
-                highresextnum=0,
-                lowresextnum=0,
-                highresscalefactor=1.0,
-                lowresscalefactor=1.0,
-                lowresfwhm=1*u.arcmin,
-                targres=-1.0,
-                return_hdu=False,
-                return_regridded_lores=False, output_fits=True):
-    """
-    Fourier combine two data cubes
-
-    Parameters
-    ----------
-    highresfitsfile : str
-        The high-resolution FITS file
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
-    highresscalefactor : float
-    lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
-        low- or high-resolution data
-    lowresfwhm : `astropy.units.Quantity`
-        The full-width-half-max of the single-dish (low-resolution) beam;
-        or the scale at which you want to try to match the low/high resolution
-        data
-    return_hdu : bool
-        Return an HDU instead of just an image.  It will contain two image
-        planes, one for the real and one for the imaginary data.
-    return_regridded_cube2 : bool
-        Return the 2nd cube regridded into the pixel space of the first?
-    """
-
-    #* Input data
-    hdu1, im1,    hd1 = file_in(hires, highresextnum)
-    hdu2, im2raw, hd2 = file_in(lores, lowresextnum)
-
-    # load default parameters (primary beam, the simultaneous FOV of the ground
-    #                          based observations)
-    # Ke Wang part. Need to think about which is the best way of doing this.
-    # Here better to get the resolution information into the header (bmaj, bmin),
-    # if it isn't there.
-
-    #* Match flux unit (convert all possible units to un-ambiguous unit like Jy/pixel or Jy/arcsec^2)
-    im1,    hd1 = flux_unit(im1, hd1)
-    im2raw, hd2 = flux_unit(im2raw, hd2)
-
-    # Regrid the low resolution image to the same pixel scale and
-    # field of view of the high resolution image
-    hdu2, im2, nax1, nax2, pixscale = regrid(hd1, im1, im2raw, hd2)
-
-    #* Image Registration (Match astrometry)
-    #  [Should be an optional step]
-    #  The initial offsets between images should not be too big. Otherwise
-    #  the correlation might be trapped to a local maximum.
-    # Package exist, but not sure how to use it.
-
-    # Fourier transform the images
-    fft1 = np.fft.fft2(np.nan_to_num(im1*highresscalefactor))
-    fft2 = np.fft.fft2(np.nan_to_num(im2*lowresscalefactor))
-
-    #* Correct for the primary beam attenuation in fourier domain
-    fft2 = pbcorr(fft2, hd1, hd2)
-
-    #* flux matching [Use space observatory image to determine absolute flux]
-    #  [should be an optional step]
-    fft1 = flux_match(fft1, fft2)
-
-    # Constructing weight kernal (normalized to max=1)
-    kernel2, kernel1 = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
-
-    #* Combine images in the fourier domain
-    fftsum, combo = fftmerge(kernel1, kernel2, fft1, fft2)
-
-    #* Final Smoothing
-    # [should be an optional step]
-    if (targres > 0.0):
-        combo = smoothing(combo, targres)
-
-    #* generate amplitude plot and PDF output
-    akb_plot(fft1, fft2, fftsum)
-
-    #* Generate the CASA 4.3 compatible header
-    combo_header = casaheader(hdu1.header)
-
-    # fits output
-    if output_fits:
-        outfits(combo, combo_header)
-
-    # Return combined image array(s)
-    if return_regridded_lores:
-        return combo, hdu2
-    else:
-        return combo
-
-#################################################################
-
-
-
-# example
-# os.system("rm -rf output.fits")
-# f = AKB_combine("faint_final.shift.fix.fits","Dragon.im350.crop.fits", lowresscalefactor=0.0015,return_hdu=True)
-
-#os.system("rm -rf output.fits")
-#os.system("rm -rf interpolate.fits")
-#interpol_hdu = AKB_interpol("Dragon.im350.crop.fits", "Dragon.im350.crop.fits", "faint_final.shift.fix.fits")
-#f = AKB_combine("faint_final.shift.fix.fits",interpol_hdu, lowresscalefactor=0.0015,return_hdu=True)
-
 def simple_deconvolve_sdim(hdu, lowresfwhm, minval=1e-1):
     """
     Perform a very simple fourier-space deconvolution of single-dish data.
@@ -720,34 +372,42 @@ def simple_deconvolve_sdim(hdu, lowresfwhm, minval=1e-1):
 
     This is not a generally useful method!
     """
-    hdu_low, im_lowraw, header_low = file_in(hdu)
-    nax2,nax1 = im_lowraw.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_low))**0.5
+    proj = Projection.from_hdu(hdu)
+
+    nax2, nax1 = proj.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
-    fft_lo = (np.fft.fft2(np.nan_to_num(im_lowraw)))
+    fft_lo = (np.fft.fft2(np.nan_to_num(proj.value)))
+
+    # Divide by the SD beam in Fourier space.
     decfft_lo = fft_lo.copy()
     decfft_lo[kfft > minval] = (fft_lo / kfft)[kfft > minval]
     dec_lo = np.fft.ifft2(decfft_lo)
+
     return dec_lo
+
 
 def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
     """
     Like simple_deconvolve_sdim, try unsharp masking by convolving
     with (1-kfft) in the fourier domain
     """
-    hdu_high, im_highraw, header_high = file_in(hdu)
-    nax2,nax1 = im_highraw.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(wcs.WCS(header_high))**0.5
+    proj = Projection.from_hdu(hdu)
+
+    nax2, nax1 = proj.shape
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
-    fft_hi = (np.fft.fft2(np.nan_to_num(im_highraw)))
+    fft_hi = (np.fft.fft2(np.nan_to_num(proj.value)))
     #umaskfft_hi = fft_hi.copy()
     #umaskfft_hi[ikfft < minval] = (fft_hi * ikfft)[ikfft < minval]
     umaskfft_hi = fft_hi * ikfft
     umask_hi = np.fft.ifft2(umaskfft_hi)
-    return umask_hi
 
+    return umask_hi
 
 
 def feather_simple(hires, lores,
@@ -855,24 +515,38 @@ def feather_simple(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    hdu_hi, im_hi, header_hi = file_in(hires, highresextnum)
-    hdu_low, im_lowraw, header_low = file_in(lores, lowresextnum)
+
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+        proj_hi = Projection.from_hdu(hdu_hi)
+    elif isinstance(hires, fits.PrimaryHDU):
+        proj_hi = Projection.from_hdu(hires)
+    else:
+        proj_hi = hires
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[highresextnum]
+        proj_lo = Projection.from_hdu(hdu_lo)
+    elif isinstance(lores, fits.PrimaryHDU):
+        proj_lo = Projection.from_hdu(lores)
+    else:
+        proj_lo = lores
 
     if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        beam_low = proj_lo.beam
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
-        if not weights.shape == im_hi.shape:
+        if not weights.shape == proj_hi.shape:
             raise ValueError("weights must be an array with the same shape as"
                              " the high-res data.")
     else:
         weights = 1.
 
     if pbresponse is not None:
-        if not pbresponse.shape == im_hi.shape:
+        if not pbresponse.shape == proj_hi.shape:
             raise ValueError("pbresponse must be an array with the same"
                              " shape as the high-res data.")
 
@@ -881,91 +555,46 @@ def feather_simple(hires, lores,
         # unit equivalent to that specified in the high-resolution header's units
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
-                                                   im1=im_hi,
-                                                   im2raw=im_lowraw,
-                                                   hd2=header_low)
+        proj_lo = proj_lo.to(proj_hi.unit)
+
+    # Add check that the units are compatible
+    equiv_units = proj_lo.unit.is_equivalent(proj_hi.unit)
+    if not equiv_units:
+        raise ValueError("Brightness units are not equivalent: "
+                         f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
-        im_low *= pbresponse
+        proj_lo_regrid *= pbresponse
 
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft,
-                             im_hi * highresscalefactor * weights,
-                             im_low * lowresscalefactor * weights,
+                             proj_hi.value * highresscalefactor * weights,
+                             proj_lo.value * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              lowpassfilterSD=lowpassfilterSD,
                              deconvSD=deconvSD,
                              )
 
-    # Divide by the
+    # Divide by the PB response
     if pbresponse is not None:
         combo /= pbresponse
 
     if return_hdu:
-        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
+        combo_hdu = fits.PrimaryHDU(data=combo.real, header=proj_hi.header)
         combo = combo_hdu
 
     if return_regridded_lores:
-        return combo, hdu_low
+        return combo, proj_lo
     else:
         return combo
 
-def linear_combine(hires, lores,
-                   highresextnum=0,
-                   lowresextnum=0,
-                   highresscalefactor=1.0,
-                   lowresscalefactor=1.0,
-                   lowresfwhm=None,
-                   return_hdu=False,
-                   return_regridded_lores=False,
-                   match_units=True,
-                   convolve=convolve_fft,
-                  ):
-    """
-    Implement a simple linear combination following Faridani et al 2017
-    """
-
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
-
-    if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
-        lowresfwhm = beam_low.major
-        log.info("Low-res FWHM: {0}".format(lowresfwhm))
-
-    if match_units:
-        # After this step, the units of im_hi are some sort of surface brightness
-        # unit equivalent to that specified in the high-resolution header's units
-        # Note that this step does NOT preserve the values of im_lowraw and
-        # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
-
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(hd1=header_hi,
-                                                   im1=im_hi,
-                                                   im2raw=im_lowraw,
-                                                   hd2=header_low)
-
-    missing_flux = im_low - convolve(im_hi, beam_low.as_kernel(pixscale))
-
-    combo = missing_flux + im_hi
-
-    if return_hdu:
-        combo_hdu = fits.PrimaryHDU(data=combo.real, header=hdu_hi.header)
-        combo = combo_hdu
-
-    if return_regridded_lores:
-        return combo, hdu_low
-    else:
-        return combo
 
 def feather_plot(hires, lores,
                  highresextnum=0,
@@ -1020,8 +649,14 @@ def feather_plot(hires, lores,
         (optional) the image encased in a FITS HDU with the relevant header
     """
     import image_tools
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    proj_lo = Projection.from_hdu(hdu_lo)
 
     print("featherplot")
     pb = ProgressBar(13)
@@ -1031,20 +666,28 @@ def feather_plot(hires, lores,
         # unit equivalent to that specified in the high-resolution header's units
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
-        im_lowraw, header_low = match_flux_units(image=im_lowraw,
-                                                 image_header=header_low.copy(),
-                                                 target_header=header_hi)
+        proj_lo = proj_lo.to(proj_hi.unit)
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    # Add check that the units are compatible
+    equiv_units = proj_lo.unit.is_equivalent(proj_hi.unit)
+    if not equiv_units:
+        raise ValueError("Brightness units are not equivalent: "
+                         f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
     pb.update()
 
     if lowresfwhm is None:
-        beam_low = radio_beam.Beam.from_fits_header(header_low)
+        beam_low = proj_lo.beam
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+
+    nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
+
     log.debug("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
     print("bottom-left pixel before shifting: kfft={0}, ikfft={1}".format(kfft[0,0], ikfft[0,0]))
     pb.update()
@@ -1054,16 +697,16 @@ def feather_plot(hires, lores,
     pb.update()
 
     if hires_threshold is None:
-        fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi*highresscalefactor)))
+        fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi.value * highresscalefactor)))
     else:
-        hires_tofft = np.nan_to_num(im_hi*highresscalefactor)
+        hires_tofft = np.nan_to_num(proj_hi.value * highresscalefactor)
         hires_tofft[hires_tofft < hires_threshold] = 0
         fft_hi = np.fft.fftshift(np.fft.fft2(hires_tofft))
     pb.update()
     if lores_threshold is None:
-        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low*lowresscalefactor)))
+        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo.value * lowresscalefactor)))
     else:
-        lores_tofft = np.nan_to_num(im_low*lowresscalefactor)
+        lores_tofft = np.nan_to_num(proj_lo.value * lowresscalefactor)
         lores_tofft[lores_tofft < lores_threshold] = 0
         fft_lo = np.fft.fftshift(np.fft.fft2(lores_tofft))
     pb.update()
@@ -1166,6 +809,8 @@ def feather_plot(hires, lores,
             'azimuthally_averaged_high_res_filtered': azavg_hi_scaled,
            }
 
+
+@deprecated("2021", message="Instead use SpectralCube.spectral_interpolate")
 def spectral_regrid(cube, outgrid):
     """
     Spectrally regrid a cube onto a new spectral output grid
@@ -1234,6 +879,7 @@ def spectral_regrid(cube, outgrid):
     return fits.PrimaryHDU(data=newcube, header=newheader)
 
 
+@deprecated("2021", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
 def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
     Smooth the cube along the spectral axis by a specific Gaussian kernel, then
@@ -1252,6 +898,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     cube_ds_hdu : fits.PrimaryHDU
         An HDU containing the output cube in FITS HDU form
     """
+    import FITS_tools
 
     kernelwidth = kernelfwhm / np.sqrt(8*np.log(2))
 
@@ -1288,11 +935,12 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 
     return cube_ds_hdu
 
-def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
+
+def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
                           return_regridded_cube_lo=False,
-                          return_hdu=False,
+                          return_hdu=True,
                           maximum_cube_size=1e8,
                          ):
     """
@@ -1304,13 +952,11 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     highresfitsfile : str
         The high-resolution FITS file
     cube_lo : SpectralCube
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
-    highresextnum : int
-        The extension number to use from the high-res FITS file
     highresscalefactor : float
+        A factor to multiply the high-resolution data by to match the
+        low- or high-resolution data
     lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
+        A factor to multiply the low-resolution data by to match the
         low- or high-resolution data
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
@@ -1322,6 +968,7 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     return_regridded_cube_lo : bool
         Return the 2nd cube regridded into the pixel space of the first?
     """
+
     if isinstance(cube_hi, str):
         cube_hi = SpectralCube.read(cube_hi)
     if isinstance(cube_lo, str):
@@ -1335,7 +982,12 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     hd_hi = cube_hi.header
     assert hd_hi['NAXIS'] == im_hi.ndim == 3
     wcs_hi = cube_hi.wcs
-    pixscale = FITS_tools.header_tools.header_to_platescale(hd_hi)
+
+    if wcs.utils.is_proj_plane_distorted(cube_hi.wcs.celestial):
+        raise ValueError("`fourier_combine_cubes` requires the input"
+                         "images to have square pixels.")
+
+    pixscale = cube_hi.wcs.celestial.proj_plane_pixel_scales()[0]
 
     cube_lo = cube_lo.to(cube_hi.unit)
 
@@ -1349,7 +1001,6 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     # new version, using reproject & spectral-cube
     cube_lo_rg = cube_lo.reproject(hd_hi)
     fitshdu_low = cube_lo_rg.hdu
-    #w2 = wcs.WCS(fitshdu_low.header)
 
     nax1,nax2 = (hd_hi['NAXIS1'],
                  hd_hi['NAXIS2'],
@@ -1376,14 +1027,19 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     if return_regridded_cube_lo:
         return outcube, fitshdu_low
     elif return_hdu:
-        return fits.PrimaryHDU(data=outcube, header=wcs_hi.to_header())
+        output_header = wcs_hi.to_header()
+        output_header['BUNIT'] = cube_hi.unit.to_string()
+        return fits.PrimaryHDU(data=outcube, header=output_header)
     else:
         return outcube
+
 
 def feather_compare(hires, lores,
                     SAS,
                     LAS,
                     lowresfwhm,
+                    highresextnum=0,
+                    lowresextnum=0,
                     beam_divide_lores=True,
                     lowpassfilterSD=False,
                     min_beam_fraction=0.1,
@@ -1440,21 +1096,33 @@ def feather_compare(hires, lores,
         stats are included.
 
     """
-    assert LAS > SAS
+    if LAS <= SAS:
+        raise ValueError("Must have LAS > SAS. Check the input parameters.")
 
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    else:
+        hdu_hi = hires
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    else:
+        hdu_lo = lores
+    proj_lo = Projection.from_hdu(hdu_lo)
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
-        if not weights.shape == im_hi.shape:
+        if not weights.shape == proj_hi.shape:
             raise ValueError("weights must be an array with the same shape as"
                              " the high-res data.")
     else:
         weights = 1.
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
+    nax2, nax1 = proj_hi.shape
+    pixscale = np.abs(proj_hi.wcs.celestial.proj_plane_pixel_scales()[0])
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1462,10 +1130,10 @@ def feather_compare(hires, lores,
 
     yy,xx = np.indices([nax2, nax1])
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
-    angscales = nax1/rr * pixscale*u.deg
+    angscales = nax1/rr * pixscale
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi * weights)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low * weights)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi * weights)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid * weights)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
@@ -1476,7 +1144,10 @@ def feather_compare(hires, lores,
     fft_lo_deconvolved[below_beamscale_plotting] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
-    assert mask.sum() > 0
+
+    if mask.sum() == 0:
+        raise ValueError("No valid uv-overlap region found. Check the inputs for "
+                         "SAS and LAS.")
 
     ratio = np.abs(fft_hi)[mask] / np.abs(fft_lo_deconvolved)[mask]
     sclip = stats.sigma_clipped_stats(ratio, sigma=3, maxiters=5)
@@ -1519,6 +1190,7 @@ def feather_compare(hires, lores,
             'median_sc': sclip[1],
             'std_sc': sclip[2],
            }
+
 
 def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
                                    beam_divide_lores=True,
@@ -1563,12 +1235,25 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
         intensity over that range.  The weighting is necessary to avoid errors
         introduced by the fact that these images are forced to have zero means.
     """
-    assert LAS > SAS
-    hdu_hi, im_hi, header_hi = file_in(hires)
-    hdu_low, im_lowraw, header_low = file_in(lores)
+    if LAS <= SAS:
+        raise ValueError("Must have LAS > SAS. Check the input parameters.")
 
-    hdu_low, im_low, nax1, nax2, pixscale = regrid(header_hi, im_hi,
-                                                   im_lowraw, header_low)
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+    else:
+        hdu_hi = hires
+    proj_hi = Projection.from_hdu(hdu_hi)
+
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[lowresextnum]
+    else:
+        hdu_lo = lores
+    proj_lo = Projection.from_hdu(hdu_lo)
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
+    nax2, nax1 = proj_hi.shape
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1578,8 +1263,8 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     rr = ((xx-(nax1-1)/2.)**2 + (yy-(nax2-1)/2.)**2)**0.5
     angscales = nax1/rr * pixscale*u.deg
 
-    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_hi)))
-    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(im_low)))
+    fft_hi = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_hi)))
+    fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid)))
     if beam_divide_lores:
         fft_lo_deconvolved = fft_lo / kfft
     else:
@@ -1590,7 +1275,9 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     fft_lo_deconvolved[below_beamscale_plotting] = np.nan
 
     mask = (angscales > SAS) & (angscales < LAS) & (~below_beamscale)
-    assert mask.sum() > 0
+    if mask.sum() == 0:
+        raise ValueError("No valid uv-overlap region found. Check the inputs for "
+                         "SAS and LAS.")
 
     hi_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_hi*mask)))
     lo_img_ring = (np.fft.ifft2(np.fft.fftshift(fft_lo*mask)))

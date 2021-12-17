@@ -1,9 +1,11 @@
 from astropy import units as u
 from astropy import wcs
+from astropy.utils import deprecated
 import radio_beam
 
 from .uvcombine import file_in
 
+@deprecated("2021", message="Instead use SpectralCube.to for unit conversions.")
 def convert_to_casa(hdu):
     """
     Convert a FITS HDU to casa-compatible units, i.e., Jy/beam

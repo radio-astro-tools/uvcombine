@@ -50,3 +50,7 @@ distribute-*.tar.gz
 
 # Mac OSX
 .DS_Store
+
+*.ipynb_checkpoints
+examples/*.png
+*.png

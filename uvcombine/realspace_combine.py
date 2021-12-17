@@ -3,9 +3,68 @@ import pylab as pl
 from astropy import units as u
 from astropy.io import fits
 from astropy.convolution import convolve_fft, Gaussian2DKernel
-import uvcombine
 import radio_beam
 from astropy import wcs
+from spectral_cube import Projection
+
+def linear_combine(hires, lores,
+                   highresextnum=0,
+                   lowresextnum=0,
+                   highresscalefactor=1.0,
+                   lowresscalefactor=1.0,
+                   lowresfwhm=None,
+                   return_hdu=False,
+                   return_regridded_lores=False,
+                   match_units=True,
+                   convolve=convolve_fft,
+                  ):
+    """
+    Implement a simple linear combination following Faridani et al 2017
+    """
+
+    if isinstance(hires, str):
+        proj_hi = Projection.from_hdu(fits.open(hires)[highresextnum])
+    else:
+        proj_hi = Projection.from_hdu(hires)
+
+    if isinstance(hires, str):
+        proj_lo = Projection.from_hdu(fits.open(lores)[lowresextnum])
+    else:
+        proj_lo = Projection.from_hdu(lores)
+
+    if lowresfwhm is None:
+        beam_low = proj_lo.beam
+        lowresfwhm = beam_low.major
+        log.info("Low-res FWHM: {0}".format(lowresfwhm))
+    else:
+        beam_low = Beam(major=lowresfwhm)
+
+    if match_units:
+        # After this step, the units of im_hi are some sort of surface brightness
+        # unit equivalent to that specified in the high-resolution header's units
+        # Note that this step does NOT preserve the values of im_lowraw and
+        # header_lowraw from above
+        # im_lowraw, header_low = match_flux_units(image=proj_lo.value,
+        #                                          image_header=proj_lo.header.copy(),
+        #                                          target_header=proj_hi.header)
+        # proj_lo = Projection(im_lowraw, header=header_low)
+
+        proj_lo = proj_lo.to(proj_hi.unit)
+
+    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+
+    missing_flux = proj_lo_regrid - proj_hi.convolve_to(beam_low)
+
+    combo = missing_flux + proj_hi
+
+    if return_hdu:
+        combo_hdu = fits.PrimaryHDU(data=combo.real, header=proj_hi.header)
+        combo = combo_hdu
+
+    if return_regridded_lores:
+        return combo, hdu_low
+    else:
+        return combo
 
 
 def image_space_combination(lowres, highres):

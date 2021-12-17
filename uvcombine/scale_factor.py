@@ -11,6 +11,7 @@ from astropy.utils.console import ProgressBar
 import numpy as np
 from astropy import stats as astrostats
 from scipy import stats
+from astropy import log
 
 from .uvcombine import feather_compare
 
@@ -96,6 +97,7 @@ def find_effSDbeam(hires, lores,
 
 def find_scale_factor(lowres_pts, highres_pts, method='distrib',
                       verbose=False,
+                      use_likelihood_fit=True,
                       **method_kwargs):
     '''
     Using overlapping points in the uv-plane, find the
@@ -120,6 +122,10 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
         Specify the method to for estimating the scale factor.
     verbose : bool, optional
         Enables plotting of the data and the scale factor relation.
+    use_likelihood_fit : bool, optional
+        When using `method='distrib'`, fit the distribution with a maximum likelihood method.
+        This requires the statsmodels package to be installed. The main reason for this fitting
+        method is to provide standard error estimates on the fit parameters.
     method_kwargs : Passed to `~scipy.stats.theilslopes` for 'linfit' and
         `~astropy.stats.sigma_clipped_stats` for 'clippedstats'. Not used by
         'distrib'.
@@ -156,20 +162,25 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
         params = stats.cauchy.fit(ratio)
 
         # Try to get standard errors from a Likelihood fit with statsmodels
-        try:
-            import statsmodels
+        if use_likelihood_fit:
+            try:
+                import statsmodels
 
-            mle_model = Likelihood(log_ratio)
-            fitted_model = mle_model.fit(params, method='nm')
-            fitted_model.df_model = len(ratio)
-            fitted_model.df_resid = len(ratio) - 2
+                mle_model = Likelihood(log_ratio)
+                fitted_model = mle_model.fit(params, method='nm')
+                fitted_model.df_model = len(ratio)
+                fitted_model.df_resid = len(ratio) - 2
 
-            params = fitted_model.params
-            stderr = fitted_model.bse
+                params = fitted_model.params
+                stderr = fitted_model.bse
 
-        except ImportError:
+            except ImportError:
+                log.info("Unable to import statsmodels needed for the likelihood fit."
+                         " Parameter error estimates cannot be calculated.")
+                stderr = np.zeros_like(params)
 
-            stderr = np.zeros_like(params)
+        else:
+                stderr = np.zeros_like(params)
 
         # The median is the scale factor.
         sc_factor = np.exp(params[0])
