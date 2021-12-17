@@ -176,13 +176,13 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
     return singledish_im
 
 
-def test_data(return_images=True,
-              powerlawindex=1.5,
-              largest_scale=56. * u.arcsec,
-              smallest_scale=3. * u.arcsec,
-              lowresfwhm=30. * u.arcsec,
-              pixel_scale=1 * u.arcsec,
-              imsize=512):
+def testing_data(return_images=True,
+                 powerlawindex=1.5,
+                 largest_scale=56. * u.arcsec,
+                 smallest_scale=3. * u.arcsec,
+                 lowresfwhm=30. * u.arcsec,
+                 pixel_scale=1 * u.arcsec,
+                 imsize=512):
 
     orig_img = generate_test_data(imsize, powerlawindex, seed=67848923)
 

@@ -5,7 +5,7 @@ from astropy.io import fits
 import numpy.testing as npt
 import numpy as np
 
-from .utils import test_data
+from .utils import testing_data
 from ..scale_factor import find_effSDbeam, find_scale_factor
 
 try:
@@ -66,7 +66,7 @@ def test_SDeff_beam():
     largest_scale = 56 * u.arcsec
     lowresfwhm = 30.*u.arcsec
 
-    orig_hdu, lowres_hdu, highres_hdu = test_data(return_images=True,
+    orig_hdu, lowres_hdu, highres_hdu = testing_data(return_images=True,
                                                 powerlawindex=1.5,
                                                 largest_scale=largest_scale,
                                                 smallest_scale=3.*u.arcsec,
