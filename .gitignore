@@ -53,3 +53,4 @@ distribute-*.tar.gz
 
 *.ipynb_checkpoints
 examples/*.png
+*.png
