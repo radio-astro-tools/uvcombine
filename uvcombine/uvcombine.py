@@ -523,11 +523,21 @@ def feather_simple(hires, lores,
         (optional) the image encased in a FITS HDU with the relevant header
     """
 
-    hdu_hi = fits.open(hires)[highresextnum]
-    proj_hi = Projection.from_hdu(hdu_hi)
+    if isinstance(hires, str):
+        hdu_hi = fits.open(hires)[highresextnum]
+        proj_hi = Projection.from_hdu(hdu_hi)
+    elif isinstance(hires, fits.PrimaryHDU):
+        proj_hi = Projection.from_hdu(hdu_hi)
+    else:
+        proj_hi = hires
 
-    hdu_lo = fits.open(lores)[lowresextnum]
-    proj_lo = Projection.from_hdu(hdu_lo)
+    if isinstance(lores, str):
+        hdu_lo = fits.open(lores)[highresextnum]
+        proj_lo = Projection.from_hdu(hdu_lo)
+    elif isinstance(lores, fits.PrimaryHDU):
+        proj_lo = Projection.from_hdu(hdu_lo)
+    else:
+        proj_lo = lores
 
     if lowresfwhm is None:
         beam_low = proj_lo.beam
@@ -561,12 +571,13 @@ def feather_simple(hires, lores,
     if pbresponse is not None:
         proj_lo_regrid *= pbresponse
 
+    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
     nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
     fftsum, combo = fftmerge(kfft, ikfft,
                              proj_hi.value * highresscalefactor * weights,
-                             im_low * lowresscalefactor * weights,
+                             proj_lo.value * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              lowpassfilterSD=lowpassfilterSD,
                              deconvSD=deconvSD,
