@@ -527,7 +527,7 @@ def feather_simple(hires, lores,
         hdu_hi = fits.open(hires)[highresextnum]
         proj_hi = Projection.from_hdu(hdu_hi)
     elif isinstance(hires, fits.PrimaryHDU):
-        proj_hi = Projection.from_hdu(hdu_hi)
+        proj_hi = Projection.from_hdu(hires)
     else:
         proj_hi = hires
 
@@ -535,7 +535,7 @@ def feather_simple(hires, lores,
         hdu_lo = fits.open(lores)[highresextnum]
         proj_lo = Projection.from_hdu(hdu_lo)
     elif isinstance(lores, fits.PrimaryHDU):
-        proj_lo = Projection.from_hdu(hdu_lo)
+        proj_lo = Projection.from_hdu(lores)
     else:
         proj_lo = lores
 
