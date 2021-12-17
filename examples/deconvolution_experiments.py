@@ -1,4 +1,4 @@
-import image_registration
+import uvcombine.utils import make_extended
 from astropy import convolution
 import numpy as np
 import pylab as pl
@@ -7,7 +7,7 @@ import pylab as pl
 from skimage.restoration import unsupervised_wiener, richardson_lucy
 
 np.random.seed(0)
-im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
+im = make_extended(imsize=256., powerlaw=1.5)
 
 singledish_kernel = convolution.Gaussian2DKernel(40/2.35, x_size=256, y_size=256)
 singledish_kernel_fft = np.fft.fft2(singledish_kernel)

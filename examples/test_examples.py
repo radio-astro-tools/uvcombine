@@ -1,8 +1,8 @@
-import image_registration
 from astropy import convolution
 import numpy as np
 import pylab as pl
 from uvcombine.uvcombine import feather_kernel, fftmerge
+from uvcombine.utils import make_extended
 
 
 pl.rcParams['image.interpolation'] = 'nearest'
@@ -14,7 +14,7 @@ pl.rcParams['image.origin'] = 'lower'
 # different power laws, different types of input...)
 # We're assuming a scale of 1"/pixel for this example
 np.random.seed(0)
-im = image_registration.tests.make_extended(imsize=256., powerlaw=1.5)
+im = make_extended(imsize=256., powerlaw=1.5)
 
 # for each step, we'll save a figure
 pl.figure(1, figsize=(16,8)).clf()
@@ -107,7 +107,7 @@ highresscalefactor=1
 fftsum, combo = fftmerge(kfft, ikfft, im_hi*highresscalefactor,
                          im_low*lowresscalefactor,
                          replace_hires=replace_hires,
-                         highpassfilterSD=highpassfilterSD,
+                        #  highpassfilterSD=highpassfilterSD,
                          deconvSD=deconvSD,
                         )
 

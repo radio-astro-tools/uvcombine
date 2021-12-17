@@ -68,6 +68,10 @@ def file_in(filename, extnum=0):
     return hdu, im, header
 
 
+# NOTE: this SHOULD work for all 2D images in brightness units.
+# Hybrid integrated moment maps will not (and I don't think that's a realistic use
+# case).
+@deprecated("2021", message='Use Projection.to for unit conversion.')
 def match_flux_units(image, image_header, target_header):
     """
     Match the flux units of the input image to the target header.  There are
@@ -790,7 +794,7 @@ def feather_plot(hires, lores,
            }
 
 
-@deprecated("2021", message="Instead use cube.spectral_interpolate")
+@deprecated("2021", message="Instead use SpectralCube.spectral_interpolate")
 def spectral_regrid(cube, outgrid):
     """
     Spectrally regrid a cube onto a new spectral output grid
@@ -859,7 +863,7 @@ def spectral_regrid(cube, outgrid):
     return fits.PrimaryHDU(data=newcube, header=newheader)
 
 
-@deprecated("2021", message="Use cube.spectral_smooth and cube.downsample_axis instead")
+@deprecated("2021", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
 def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
     Smooth the cube along the spectral axis by a specific Gaussian kernel, then
@@ -916,7 +920,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
-def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
+def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
                           return_regridded_cube_lo=False,
@@ -932,13 +936,11 @@ def fourier_combine_cubes(cube_hi, cube_lo, highresextnum=0,
     highresfitsfile : str
         The high-resolution FITS file
     cube_lo : SpectralCube
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
-    highresextnum : int
-        The extension number to use from the high-res FITS file
     highresscalefactor : float
+        A factor to multiply the high-resolution data by to match the
+        low- or high-resolution data
     lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
+        A factor to multiply the low-resolution data by to match the
         low- or high-resolution data
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;

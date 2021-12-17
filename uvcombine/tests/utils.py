@@ -1,4 +1,3 @@
-import image_registration
 from astropy import convolution
 from astropy.io import fits
 from astropy import units as u
@@ -6,14 +5,15 @@ import numpy as np
 
 
 from ..uvcombine import feather_compare
+from ..utils import make_extended
 
 
 def generate_test_data(imsize, powerlaw, seed=0):
     """
-    Simple wrapper of `image_registration.tests.make_extended`
+    Simple wrapper of `make_extended`
     """
     np.random.seed(seed)
-    im = image_registration.tests.make_extended(imsize=imsize, powerlaw=powerlaw)
+    im = make_extended(imsize=imsize, powerlaw=powerlaw)
     return im
 
 
