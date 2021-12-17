@@ -1,12 +1,4 @@
-"""
-Code for fourier-space combination of single dish and interferometer data
-(or zero-spacing and non-zero-spacing data).  See:
 
-    Stanimirovic et al 1999 (http://esoads.eso.org/abs/1999MNRAS.302..417S)
-    (compares single-dish and interferometer data over commonly sampled
-    UV space, but then does image combination + image-space deconvolution,
-    which is not performed here)
-"""
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -19,6 +11,7 @@ import numpy as np
 from astropy import wcs,stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
+
 
 @deprecated("2021")
 def file_in(filename, extnum=0):
@@ -565,6 +558,12 @@ def feather_simple(hires, lores,
 
         proj_lo = proj_lo.to(proj_hi.unit)
 
+    # Add check that the units are compatible
+    equiv_units = proj_lo.unit.is_equivalent(proj_hi.unit)
+    if not equiv_units:
+        raise ValueError("Brightness units are not equivalent: "
+                         f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
+
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     # Apply the pbresponse to the regridded low-resolution data
@@ -668,6 +667,12 @@ def feather_plot(hires, lores,
         # Note that this step does NOT preserve the values of im_lowraw and
         # header_lowraw from above
         proj_lo = proj_lo.to(proj_hi.unit)
+
+    # Add check that the units are compatible
+    equiv_units = proj_lo.unit.is_equivalent(proj_hi.unit)
+    if not equiv_units:
+        raise ValueError("Brightness units are not equivalent: "
+                         f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
 
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
