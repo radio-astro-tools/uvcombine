@@ -18,7 +18,8 @@ def generate_test_data(imsize, powerlaw, seed=0):
     return im
 
 
-def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False):
+def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False,
+                    bunit=u.K):
 
     header = {'CDELT1': -(pixel_scale).to(u.deg).value,
               'CDELT2': (pixel_scale).to(u.deg).value,
@@ -33,7 +34,7 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
               'CTYPE2': 'GLAT-CAR',
               'CUNIT1': 'deg',
               'CUNIT2': 'deg',
-              'BUNIT': 'MJy/sr',
+              'BUNIT': bunit.to_string(),
               }
 
     if with_specaxis:
