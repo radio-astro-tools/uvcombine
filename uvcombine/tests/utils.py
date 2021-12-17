@@ -17,7 +17,7 @@ def generate_test_data(imsize, powerlaw, seed=0):
     return im
 
 
-def generate_header(pixel_scale, beamfwhm, imsize, restfreq):
+def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False):
 
     header = {'CDELT1': -(pixel_scale).to(u.deg).value,
               'CDELT2': (pixel_scale).to(u.deg).value,
@@ -32,14 +32,16 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq):
               'CTYPE2': 'GLAT-CAR',
               'CUNIT1': 'deg',
               'CUNIT2': 'deg',
-              'CRVAL3': restfreq.to(u.Hz).value,
-              'CUNIT3': 'Hz',
-              'CDELT3': 1e6,  # 1 MHz; doesn't matter
-              'CRPIX3': 1,
-              'CTYPE3': 'FREQ',
-              'RESTFRQ': restfreq.to(u.Hz).value,
               'BUNIT': 'MJy/sr',
               }
+
+    if with_specaxis:
+        header['CRVAL3'] = restfreq.to(u.Hz).value
+        header['CUNIT3'] = 'Hz'
+        header['CDELT3'] = 1e6,  # 1 MHz; doesn't matter
+        header['CRPIX3'] = 1
+        header['CTYPE3'] = 'FREQ'
+        header['RESTFRQ'] = restfreq.to(u.Hz).value
 
     return fits.Header(header)
 
@@ -174,16 +176,16 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
     return singledish_im
 
 
-def test_data(return_images=True):
+def test_data(return_images=True,
+              powerlawindex=1.5,
+              largest_scale=56. * u.arcsec,
+              smallest_scale=3. * u.arcsec,
+              lowresfwhm=30. * u.arcsec,
+              pixel_scale=1 * u.arcsec,
+              imsize=512):
 
-    imsize = 512
+    orig_img = generate_test_data(imsize, powerlawindex, seed=67848923)
 
-    orig_img = generate_test_data(imsize, 1.5, seed=67848923)
-
-    largest_scale = 56. * u.arcsec
-    smallest_scale = 3. * u.arcsec
-    lowresfwhm = 30. * u.arcsec
-    pixel_scale = 1 * u.arcsec
     restfreq = (2 * u.mm).to(u.GHz, u.spectral())
 
     sd_img = singledish_observe_image(orig_img, pixel_scale, lowresfwhm)
