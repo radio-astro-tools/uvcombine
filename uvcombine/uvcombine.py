@@ -1027,7 +1027,9 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     if return_regridded_cube_lo:
         return outcube, fitshdu_low
     elif return_hdu:
-        return fits.PrimaryHDU(data=outcube, header=wcs_hi.to_header())
+        output_header = wcs_hi.to_header()
+        output_header['BUNIT'] = cube_hi.unit.to_string()
+        return fits.PrimaryHDU(data=outcube, header=output_header)
     else:
         return outcube
 
