@@ -1,5 +1,5 @@
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as pl
 from astropy import units as u
 from astropy.io import fits
 from astropy.convolution import convolve_fft, Gaussian2DKernel
