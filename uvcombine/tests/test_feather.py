@@ -48,17 +48,6 @@ def test_feather_simple_cube(plaw_test_cube_sc):
     assert combo_cube_sc.unit == interf_cube.unit
 
 
-def test_feather_simple_cube_hdu(plaw_test_cube_hdu):
-
-    orig_hdu, sd_hdu, interf_hdu = plaw_test_cube_hdu
-
-    combo_cube = fourier_combine_cubes(interf_hdu, sd_hdu, return_hdu=True)
-
-    assert orig_hdu.shape == combo_cube.shape
-
-    assert combo_cube.header['BUNIT'] == interf_hdu['BUNIT']
-
-
 def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc

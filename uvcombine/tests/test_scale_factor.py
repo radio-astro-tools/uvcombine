@@ -5,7 +5,6 @@ from astropy.io import fits
 import numpy.testing as npt
 import numpy as np
 
-from .utils import testing_data
 from ..scale_factor import find_effSDbeam, find_scale_factor
 
 try:

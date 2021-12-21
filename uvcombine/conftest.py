@@ -60,10 +60,10 @@ def plaw_test_data():
 def plaw_test_cube_sc():
     out = generate_test_cube(return_hdu=False,
                              powerlawindex=1.5,
-                             largest_scale=56. * u.arcsec,
-                             smallest_scale=3. * u.arcsec,
-                             lowresfwhm=30. * u.arcsec,
-                             pixel_scale=1 * u.arcsec,
+                             largest_scale=56. * units.arcsec,
+                             smallest_scale=3. * units.arcsec,
+                             lowresfwhm=30. * units.arcsec,
+                             pixel_scale=1 * units.arcsec,
                              imsize=512,
                              nchan=3)
 
@@ -75,10 +75,10 @@ def plaw_test_cube_sc():
 def plaw_test_cube_hdu():
     out = generate_test_cube(return_hdu=True,
                              powerlawindex=1.5,
-                             largest_scale=56. * u.arcsec,
-                             smallest_scale=3. * u.arcsec,
-                             lowresfwhm=30. * u.arcsec,
-                             pixel_scale=1 * u.arcsec,
+                             largest_scale=56. * units.arcsec,
+                             smallest_scale=3. * units.arcsec,
+                             lowresfwhm=30. * units.arcsec,
+                             pixel_scale=1 * units.arcsec,
                              imsize=512,
                              nchan=3)
 

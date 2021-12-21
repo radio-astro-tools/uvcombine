@@ -7,11 +7,11 @@ from astropy import units as u
 from spectral_cube import SpectralCube
 
 
-from ..uvcombine import feather_compare
+from .uvcombine import feather_compare
 
 
 def make_extended(imsize, powerlaw=2.0,
-                  return_fft=False, full_fft=True, randomseed=32788324):
+                  return_fft=False, full_fft=True, seed=32788324):
     '''
 
     Generate a 2D power-law image with a specified index and random phases.
@@ -53,7 +53,7 @@ def make_extended(imsize, powerlaw=2.0,
     # flag out the bad point to avoid warnings
     rr[rr == 0] = np.nan
 
-    with NumpyRNGContext(randomseed):
+    with NumpyRNGContext(seed):
 
         Np1 = (imsize - 1) // 2 if imsize % 2 != 0 else imsize // 2
 
@@ -198,9 +198,9 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
 
 
 def generate_test_fits(imsize, powerlaw, beamfwhm,
-                       pixel_scale=1 * u.arcsec, seed=0,
+                       pixel_scale=1 * u.arcsec,
                        restfreq=100 * u.GHz,
-                       ):
+                       seed=32788324):
     """
     Create a FITS image using ``image_registration``'s toolkit for producing
     power-law power-spectrum images.
@@ -278,7 +278,8 @@ def generate_testing_data(return_images=True,
                           smallest_scale=3. * u.arcsec,
                           lowresfwhm=30. * u.arcsec,
                           pixel_scale=1 * u.arcsec,
-                          imsize=512):
+                          imsize=512,
+                          seed=32788324):
 
     orig_img = make_extended(imsize=imsize, powerlaw=powerlawindex, seed=seed)
 
@@ -327,7 +328,8 @@ def generate_test_cube(return_hdu=False,
                        lowresfwhm=30. * u.arcsec,
                        pixel_scale=1 * u.arcsec,
                        imsize=512,
-                       nchan=3):
+                       nchan=3,
+                       seed=32788324):
     '''
     '''
 
@@ -337,7 +339,7 @@ def generate_test_cube(return_hdu=False,
     channels_sd = []
     channels_interf = []
     for i in range(nchan):
-        chan = make_extended(imsize, powerlawindex, seed=67848923)
+        chan = make_extended(imsize, powerlawindex, seed=seed)
 
         sd_img = singledish_observe_image(chan, pixel_scale, lowresfwhm)
 
