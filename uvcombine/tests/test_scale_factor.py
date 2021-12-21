@@ -67,7 +67,7 @@ def test_SDeff_beam(plaw_test_data):
                        lowpassfilterSD=False,
                        min_beam_fraction=0.1,
                        alpha=0.85,
-                       verbose=True)
+                       verbose=False)
 
     # Smallest slope should be the actual FWHM of 30''
     # However, there's some uncertainty to deal with and there's a quadratic
