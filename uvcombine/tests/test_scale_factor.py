@@ -15,20 +15,11 @@ except ImportError:
     STATMODELS_INSTALLED = False
 
 
-def fake_overlap_samples(size=1000):
-
-    np.random.seed(67848923)
-
-    lowres_pts = np.random.lognormal(size=size)
-    highres_pts = np.abs(lowres_pts + np.random.normal(scale=0.05, size=size))
-
-    return lowres_pts, highres_pts
-
 
 @pytest.mark.skipif('not STATMODELS_INSTALLED')
-def test_scale_factor_distrib():
+def test_scale_factor_distrib(fake_overlap_samples):
 
-    lowres_pts, highres_pts = fake_overlap_samples()
+    lowres_pts, highres_pts = fake_overlap_samples
 
     sf, sf_stderr = find_scale_factor(lowres_pts, highres_pts,
                                       method='distrib')
@@ -37,9 +28,9 @@ def test_scale_factor_distrib():
     npt.assert_almost_equal(sf_stderr, 0.001, decimal=3)
 
 
-def test_scale_factor_linfit():
+def test_scale_factor_linfit(fake_overlap_samples):
 
-    lowres_pts, highres_pts = fake_overlap_samples()
+    lowres_pts, highres_pts = fake_overlap_samples
 
     sf, sf_CI = find_scale_factor(lowres_pts, highres_pts,
                                   method='linfit')
@@ -49,9 +40,9 @@ def test_scale_factor_linfit():
     npt.assert_almost_equal(sf_CI[1], 1.000, decimal=3)
 
 
-def test_scale_factor_sigclip():
+def test_scale_factor_sigclip(fake_overlap_samples):
 
-    lowres_pts, highres_pts = fake_overlap_samples()
+    lowres_pts, highres_pts = fake_overlap_samples
 
     sf_dict = find_scale_factor(lowres_pts, highres_pts,
                                 method='clippedstats')
@@ -61,17 +52,12 @@ def test_scale_factor_sigclip():
     npt.assert_almost_equal(sf_dict["scale_factor_std"], 0.058, decimal=3)
 
 
-def test_SDeff_beam():
+def test_SDeff_beam(plaw_test_data):
 
     largest_scale = 56 * u.arcsec
     lowresfwhm = 30.*u.arcsec
 
-    orig_hdu, lowres_hdu, highres_hdu = testing_data(return_images=True,
-                                                powerlawindex=1.5,
-                                                largest_scale=largest_scale,
-                                                smallest_scale=3.*u.arcsec,
-                                                lowresfwhm=lowresfwhm,
-                                                pixel_scale=1*u.arcsec)
+    orig_hdu, lowres_hdu, highres_hdu = plaw_test_data
 
     lowresfwhms = np.arange(20, 40, 2) * u.arcsec
 

@@ -1,17 +1,12 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-"""
-This is an Astropy affiliated package.
-"""
+from ._astropy_init import __version__, test
 
-# Affiliated packages may add whatever they like to this file, but
-# should keep this content at the top.
-# ----------------------------------------------------------------------------
-from ._astropy_init import *
-# ----------------------------------------------------------------------------
+from pkg_resources import get_distribution, DistributionNotFound
 
 # For egg_info test builds to pass, put package imports here.
-if not _ASTROPY_SETUP_:
-    from .uvcombine import (feather_plot, feather_simple, spectral_regrid,
-                            spectral_smooth_and_downsample,
-                            fourier_combine_cubes)
+from .uvcombine import (feather_plot, feather_simple, feather_compare,
+                        fourier_combine_cubes)
+
+__all__ = ['feather_plot', 'feather_simple', 'feather_compare',
+           'fourier_combine_cubes']

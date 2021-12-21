@@ -1,34 +1,87 @@
 # this contains imports plugins that configure py.test for astropy tests.
 # by importing them here in conftest.py they are discoverable by py.test
 # no matter how it is invoked within the source tree.
+from __future__ import print_function, absolute_import, division
 
-# from astropy.tests.pytest_plugins import *
+import os
+from distutils.version import LooseVersion
 
-## Uncomment the following line to treat all DeprecationWarnings as
-## exceptions
-# enable_deprecations_as_exceptions()
+import pytest
+import numpy as np
+from astropy.io import fits
+from astropy import wcs
+from astropy import units
 
-## Uncomment and customize the following lines to add/remove entries
-## from the list of packages for which version numbers are displayed
-## when running the tests
-# try:
-#     PYTEST_HEADER_MODULES['Astropy'] = 'astropy'
-#     PYTEST_HEADER_MODULES['scikit-image'] = 'skimage'
-#     del PYTEST_HEADER_MODULES['h5py']
-# except NameError:  # needed to support Astropy < 1.0
-#     pass
+from astropy.version import version as astropy_version
 
-## Uncomment the following lines to display the version number of the
-## package rather than the version number of Astropy in the top line when
-## running the tests.
-# import os
-#
-## This is to figure out the affiliated package version, rather than
-## using Astropy's
-# from . import version
-#
-# try:
-#     packagename = os.path.basename(os.path.dirname(__file__))
-#     TESTED_VERSIONS[packagename] = version.version
-# except NameError:   # Needed to support Astropy <= 1.0.0
-#     pass
+from .utils import (generate_testing_data,
+                    generate_test_cube,
+                    generate_test_fits)
+
+if astropy_version < '3.0':
+    from astropy.tests.pytest_plugins import *
+    del pytest_report_header
+else:
+    from pytest_astropy_header.display import PYTEST_HEADER_MODULES, TESTED_VERSIONS
+
+
+def pytest_configure(config):
+
+    config.option.astropy_header = True
+
+    PYTEST_HEADER_MODULES['Astropy'] = 'astropy'
+
+@pytest.fixture
+def fake_overlap_samples(size=1000):
+
+    np.random.seed(67848923)
+
+    lowres_pts = np.random.lognormal(size=size)
+    highres_pts = np.abs(lowres_pts + np.random.normal(scale=0.05, size=size))
+
+    return lowres_pts, highres_pts
+
+@pytest.fixture
+def plaw_test_data():
+    out = generate_testing_data(return_images=True,
+                                powerlawindex=1.5,
+                                largest_scale=56. * units.arcsec,
+                                smallest_scale=3. * units.arcsec,
+                                lowresfwhm=30. * units.arcsec,
+                                pixel_scale=1 * units.arcsec,
+                                imsize=512)
+
+    # angscales, ratios, lowres_pts, highres_pts = out
+    orig_hdu, lowres_hdu, highres_hdu = out
+
+    return orig_hdu, lowres_hdu, highres_hdu
+
+@pytest.fixture
+def plaw_test_cube_sc():
+    out = generate_test_cube(return_hdu=False,
+                             powerlawindex=1.5,
+                             largest_scale=56. * u.arcsec,
+                             smallest_scale=3. * u.arcsec,
+                             lowresfwhm=30. * u.arcsec,
+                             pixel_scale=1 * u.arcsec,
+                             imsize=512,
+                             nchan=3)
+
+    orig_cube, sd_cube, interf_cube = out
+
+    return orig_cube, sd_cube, interf_cube
+
+@pytest.fixture
+def plaw_test_cube_hdu():
+    out = generate_test_cube(return_hdu=True,
+                             powerlawindex=1.5,
+                             largest_scale=56. * u.arcsec,
+                             smallest_scale=3. * u.arcsec,
+                             lowresfwhm=30. * u.arcsec,
+                             pixel_scale=1 * u.arcsec,
+                             imsize=512,
+                             nchan=3)
+
+    orig_hdu, sd_hdu, interf_hdu = out
+
+    return orig_hdu, sd_hdu, interf_hdu
