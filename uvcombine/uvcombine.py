@@ -748,7 +748,7 @@ def feather_plot(hires, lores,
         raise ValueError("xaxisunit must be in (arcsec, lambda)")
 
 
-    import pylab as pl
+    import matplotlib.pyplot as pl
 
     pl.clf()
     ax1 = pl.subplot(2,1,1)
@@ -1153,7 +1153,7 @@ def feather_compare(hires, lores,
     sclip = stats.sigma_clipped_stats(ratio, sigma=3, maxiters=5)
 
     if doplot:
-        import pylab as pl
+        import matplotlib.pyplot as pl
         pl.clf()
         pl.suptitle("{0} - {1}".format(SAS,LAS))
         pl.subplot(2,2,1)

@@ -1,7 +1,5 @@
 import numpy as np
 from .uvcombine import fftmerge, feather_kernel
-from turbustat.statistics import psds
-import pylab as pl
 
 def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
                                       suffix="", replacement_threshold=0.5,
@@ -10,6 +8,9 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
     """
     Create diagnostic plots for different simulated feathers
     """
+
+    from turbustat.statistics import psds
+    import pylab as pl
 
     feathers = {}
     fig1 = pl.figure(1, figsize=(16,16))
