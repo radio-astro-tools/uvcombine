@@ -4,16 +4,16 @@ import itertools
 from astropy.io import fits
 from spectral_cube import SpectralCube, Projection
 
-# try:
-from casatasks import feather, importfits
-from casatools import image
+try:
+    from casatools import image
+    from casatasks import feather, importfits
 
-ia = image()
+    ia = image()
 
-casa_imported = True
+    casa_imported = True
 
-# except ImportError:
-#     casa_imported = False
+except ImportError:
+    casa_imported = False
 
 from .. import feather_simple
 
