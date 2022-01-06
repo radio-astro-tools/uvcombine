@@ -16,7 +16,11 @@ from astropy.version import version as astropy_version
 
 from .utils import (generate_testing_data,
                     generate_test_cube,
+                    generate_test_fits,
+                    singledish_observe_image,
+                    interferometrically_observe_image,
                     generate_test_fits)
+
 
 if astropy_version < '3.0':
     from astropy.tests.pytest_plugins import *
@@ -85,3 +89,48 @@ def plaw_test_cube_hdu():
     orig_hdu, sd_hdu, interf_hdu = out
 
     return orig_hdu, sd_hdu, interf_hdu
+
+
+@pytest.fixture
+def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
+
+    pixel_scale = 1 * units.arcsec
+
+    # Generate input image
+    input_hdu = generate_test_fits(imsize=512, powerlaw=1.5,
+                                   beamfwhm=2*units.arcsec,
+                                   pixel_scale=pixel_scale)
+
+    input_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as.fits"
+    input_hdu.writeto(tmp_path / input_fn)
+
+    # Make Interferometric image
+    intf_data = interferometrically_observe_image(image=input_hdu.data,
+                                                  pixel_scale=pixel_scale,
+                                                  largest_angular_scale=40*units.arcsec,
+                                                  smallest_angular_scale=2*units.arcsec)[0].real
+    intf_hdu = fits.PrimaryHDU(data=intf_data,
+                               header=input_hdu.header)
+    intf_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as.fits"
+    intf_hdu.writeto(tmp_path / intf_fn)
+
+    # Make SD image
+    sd_header = input_hdu.header.copy()
+    sd_header['BMAJ'] = sd_header['BMIN'] = (33*units.arcsec).to(units.deg).value
+
+    sd_data = singledish_observe_image(image=input_hdu.data,
+                                       pixel_scale=pixel_scale,
+                                       smallest_angular_scale=33*units.arcsec)
+    sd_hdu = fits.PrimaryHDU(data=sd_data, header=sd_header)
+    sd_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits"
+    sd_hdu.writeto(tmp_path / sd_fn)
+
+    # log.info("Feather data")
+    # feathered_hdu = feather_simple(hires=intf_hdu, lores=sd_hdu, return_hdu=True)
+    # feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_MJySr.fits",
+    #                       overwrite=True)
+    # feathered_hdu = feather_simple(hires=intf_fn, lores=sd_fn, return_hdu=True)
+    # feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_JyBeam.fits",
+    #                       overwrite=True)
+
+    return tmp_path, tmp_path / input_fn, tmp_path / intf_fn, tmp_path / sd_fn
