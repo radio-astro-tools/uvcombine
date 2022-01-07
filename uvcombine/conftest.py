@@ -14,6 +14,8 @@ from astropy import units
 
 from astropy.version import version as astropy_version
 
+from radio_beam import Beam
+
 from .utils import (generate_testing_data,
                     generate_test_cube,
                     generate_test_fits,
@@ -116,21 +118,16 @@ def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
 
     # Make SD image
     sd_header = input_hdu.header.copy()
-    sd_header['BMAJ'] = sd_header['BMIN'] = (33*units.arcsec).to(units.deg).value
+
+    major = 33*units.arcsec
+    sd_beam = Beam(major=major)
+    sd_header.update(sd_beam.to_header_keywords())
 
     sd_data = singledish_observe_image(image=input_hdu.data,
                                        pixel_scale=pixel_scale,
-                                       smallest_angular_scale=33*units.arcsec)
+                                       beam=sd_beam)
     sd_hdu = fits.PrimaryHDU(data=sd_data, header=sd_header)
     sd_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits"
     sd_hdu.writeto(tmp_path / sd_fn)
-
-    # log.info("Feather data")
-    # feathered_hdu = feather_simple(hires=intf_hdu, lores=sd_hdu, return_hdu=True)
-    # feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_MJySr.fits",
-    #                       overwrite=True)
-    # feathered_hdu = feather_simple(hires=intf_fn, lores=sd_fn, return_hdu=True)
-    # feathered_hdu.writeto("input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as_sd33as_feathered_JyBeam.fits",
-    #                       overwrite=True)
 
     return tmp_path, tmp_path / input_fn, tmp_path / intf_fn, tmp_path / sd_fn

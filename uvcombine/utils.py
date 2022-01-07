@@ -164,7 +164,7 @@ def interferometrically_observe_image(image, pixel_scale,
 
     return im_interferometered, ring
 
-def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
+def singledish_observe_image(image, pixel_scale, beam):
     """
     Given an array image with a specified pixel scale, interferometrically
     observe that image.
@@ -175,8 +175,8 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
         The image array (should be a numpy array, not a quantity array)
     pixel_scale : u.arcsec equivalent
         The (square) pixel size in arcsec.
-    smallest_angular_scale : u.arcsec equivalent
-        The beam of the image.  This is interpreted as the FWHM of a gaussian.
+    beam : `~radio_beam.Beam`
+        The beam of the image.
 
     Returns
     -------
@@ -184,8 +184,7 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
         The image array resulting from smoothing the input image
     """
 
-    FWHM_CONSTANT = (8*np.log(2))**0.5
-    kernel = convolution.Gaussian2DKernel(smallest_angular_scale/FWHM_CONSTANT/pixel_scale)
+    kernel = beam.as_kernel(pixel_scale)
 
     # create the single-dish map by convolving the image with a FWHM=40" kernel
     # (this interpretation is much easier than the sharp-edged stuff in fourier
