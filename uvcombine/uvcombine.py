@@ -715,9 +715,9 @@ def feather_plot(hires, lores,
         fft_hi = np.fft.fftshift(np.fft.fft2(hires_tofft))
     pb.update()
     if lores_threshold is None:
-        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo.value * lowresscalefactor)))
+        fft_lo = np.fft.fftshift(np.fft.fft2(np.nan_to_num(proj_lo_regrid.value * lowresscalefactor)))
     else:
-        lores_tofft = np.nan_to_num(proj_lo.value * lowresscalefactor)
+        lores_tofft = np.nan_to_num(proj_lo_regrid.value * lowresscalefactor)
         lores_tofft[lores_tofft < lores_threshold] = 0
         fft_lo = np.fft.fftshift(np.fft.fft2(lores_tofft))
     pb.update()
@@ -762,7 +762,7 @@ def feather_plot(hires, lores,
     # (nax1) pixels = where rad is 1
     # *** ASSUMES SQUARE ***
     rad_pix = nax1/rad
-    rad_as = pixscale * 3600 * rad_pix
+    rad_as = pixscale * rad_pix
     log.debug("pixscale={0} nax1={1}".format(pixscale, nax1))
     if xaxisunit == 'lambda':
         #restfrq = (wcs.WCS(hd1).wcs.restfrq*u.Hz)
