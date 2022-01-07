@@ -270,6 +270,8 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
     # sigma in pixels
     sigma = ((lowresfwhm/fwhm/(pixscale)).decompose().value)
+    log.info(f"sigma: {sigma}, lowresfwhm: {lowresfwhm}, pixscale: {pixscale}")
+
     # not used, just noted that these are the theoretical values (...maybe...)
     #sigma_fftspace = (1/(4*np.pi**2*sigma**2))**0.5
     #sigma_fftspace = (2*np.pi*sigma)**-1
@@ -535,7 +537,7 @@ def feather_simple(hires, lores,
     if lowresfwhm is None:
         beam_low = proj_lo.beam
         lowresfwhm = beam_low.major
-        log.info("Low-res FWHM: {0}".format(lowresfwhm))
+        # log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
@@ -648,15 +650,24 @@ def feather_plot(hires, lores,
     combo_hdu : fits.PrimaryHDU
         (optional) the image encased in a FITS HDU with the relevant header
     """
-    import image_tools
+    # import image_tools
+    from turbustat.statistics.psds import pspec
 
     if isinstance(hires, str):
         hdu_hi = fits.open(hires)[highresextnum]
-    proj_hi = Projection.from_hdu(hdu_hi)
+        proj_hi = Projection.from_hdu(hdu_hi)
+    elif isinstance(hires, fits.PrimaryHDU):
+        proj_hi = Projection.from_hdu(hires)
+    else:
+        proj_hi = hires
 
     if isinstance(lores, str):
         hdu_lo = fits.open(lores)[lowresextnum]
-    proj_lo = Projection.from_hdu(hdu_lo)
+        proj_lo = Projection.from_hdu(hdu_lo)
+    elif isinstance(lores, fits.PrimaryHDU):
+        proj_lo = Projection.from_hdu(lores)
+    else:
+        proj_lo = lores
 
     print("featherplot")
     pb = ProgressBar(13)
@@ -711,19 +722,34 @@ def feather_plot(hires, lores,
         fft_lo = np.fft.fftshift(np.fft.fft2(lores_tofft))
     pb.update()
 
-    rad,azavg_kernel = image_tools.radialprofile.azimuthalAverage(np.abs(kfft), returnradii=True)
+    # rad,azavg_kernel = image_tools.radialprofile.azimuthalAverage(np.abs(kfft), returnradii=True)
+    # pb.update()
+    # rad,azavg_ikernel = image_tools.radialprofile.azimuthalAverage(np.abs(ikfft), returnradii=True)
+    # pb.update()
+    # rad,azavg_hi = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi), returnradii=True)
+    # pb.update()
+    # rad,azavg_lo = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo), returnradii=True)
+    # pb.update()
+    # rad,azavg_hi_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi*ikfft), returnradii=True)
+    # pb.update()
+    # rad,azavg_lo_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo*kfft), returnradii=True)
+    # pb.update()
+    # rad,azavg_lo_deconv = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo/kfft), returnradii=True)
+    # pb.update()
+
+    rad,azavg_kernel = pspec(np.abs(kfft))
     pb.update()
-    rad,azavg_ikernel = image_tools.radialprofile.azimuthalAverage(np.abs(ikfft), returnradii=True)
+    rad,azavg_ikernel = pspec(np.abs(ikfft))
     pb.update()
-    rad,azavg_hi = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi), returnradii=True)
+    rad,azavg_hi = pspec(np.abs(fft_hi))
     pb.update()
-    rad,azavg_lo = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo), returnradii=True)
+    rad,azavg_lo = pspec(np.abs(fft_lo))
     pb.update()
-    rad,azavg_hi_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_hi*ikfft), returnradii=True)
+    rad,azavg_hi_scaled = pspec(np.abs(fft_hi*ikfft))
     pb.update()
-    rad,azavg_lo_scaled = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo*kfft), returnradii=True)
+    rad,azavg_lo_scaled = pspec(np.abs(fft_lo*kfft))
     pb.update()
-    rad,azavg_lo_deconv = image_tools.radialprofile.azimuthalAverage(np.abs(fft_lo/kfft), returnradii=True)
+    rad,azavg_lo_deconv = pspec(np.abs(fft_lo/kfft))
     pb.update()
 
     # use the same "OK" mask for everything because it should just be an artifact
@@ -758,14 +784,17 @@ def feather_plot(hires, lores,
                label="High-res Kernel")
     ax1.vlines(lowresfwhm.to(u.arcsec).value, 1e-5, 1.1, linestyle='--', color='k')
     ax1.set_ylim(1e-5, 1.1)
+
     arg_xmin = np.nanargmin(np.abs((azavg_ikernel)-(1-1e-5)))
-    xlim = xaxis[arg_xmin]/1.1, xaxis[1]*1.1
+    xlim = xaxis[arg_xmin].value / 1.1, xaxis[1].value * 1.1
     log.debug("Xlim: {0}".format(xlim))
-    assert all(np.isfinite(xlim))
+    assert np.isfinite(xlim[0])
+    assert np.isfinite(xlim[1])
     ax1.set_xlim(*xlim)
 
     ax1.set_ylabel("Kernel Weight")
 
+    ax1.legend()
 
     ax2 = pl.subplot(2,1,2)
     ax2.loglog(xaxis[OK], azavg_lo[OK], color='b', linewidth=2, alpha=0.8,
@@ -778,26 +807,27 @@ def feather_plot(hires, lores,
                 )
     ax2.set_ylabel("Power spectrum $|FT|$")
 
-    ax3 = pl.subplot(2,1,2)
-    ax3.loglog(xaxis[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
+    ax2.loglog(xaxis[OK], azavg_lo_scaled[OK], color='b', linewidth=2, alpha=0.5,
                linestyle='--',
                label="Low-res scaled image")
-    ax3.loglog(xaxis[OK], azavg_lo_deconv[OK], color='b', linewidth=2, alpha=0.5,
+    ax2.loglog(xaxis[OK], azavg_lo_deconv[OK], color='b', linewidth=2, alpha=0.5,
                linestyle=':',
                label="Low-res deconvolved image")
-    ax3.loglog(xaxis[OK], azavg_hi_scaled[OK], color='r', linewidth=2, alpha=0.5,
+    ax2.loglog(xaxis[OK], azavg_hi_scaled[OK], color='r', linewidth=2, alpha=0.5,
                linestyle='--',
                label="High-res scaled image")
-    ax3.set_xlim(*xlim)
+    ax2.set_xlim(*xlim)
     if xaxisunit == 'arcsec':
-        ax3.set_xlabel("Angular Scale (arcsec)")
+        ax2.set_xlabel("Angular Scale (arcsec)")
     elif xaxisunit == 'lambda':
-        ax3.set_xscale('linear')
-        ax3.set_xlim(0, xlim[0])
-        ax3.set_xlabel("Baseline Length (lambda)")
-    ax3.set_ylim(min([azavg_lo_scaled[arg_xmin], azavg_lo_scaled[2], azavg_hi_scaled[arg_xmin], azavg_hi_scaled[2]]),
+        ax2.set_xscale('linear')
+        ax2.set_xlim(0, xlim[0])
+        ax2.set_xlabel("Baseline Length (lambda)")
+    ax2.set_ylim(min([azavg_lo_scaled[arg_xmin], azavg_lo_scaled[2], azavg_hi_scaled[arg_xmin], azavg_hi_scaled[2]]),
                  1.1*max([np.nanmax(azavg_lo_scaled), np.nanmax(azavg_hi_scaled)]),
                 )
+
+    ax2.legend()
 
     return {'radius':rad,
             'radius_as': rad_as,
