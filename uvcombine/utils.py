@@ -5,6 +5,7 @@ from astropy import convolution
 from astropy.io import fits
 from astropy import units as u
 from spectral_cube import SpectralCube
+from radio_beam import Beam
 
 
 from .uvcombine import feather_compare
@@ -284,7 +285,7 @@ def generate_testing_data(return_images=True,
 
     restfreq = (2 * u.mm).to(u.GHz, u.spectral())
 
-    sd_img = singledish_observe_image(orig_img, pixel_scale, lowresfwhm)
+    sd_img = singledish_observe_image(orig_img, pixel_scale, Beam(lowresfwhm))
 
     interf_img = \
         interferometrically_observe_image(orig_img, pixel_scale,
@@ -340,7 +341,7 @@ def generate_test_cube(return_hdu=False,
     for i in range(nchan):
         chan = make_extended(imsize, powerlawindex, seed=seed)
 
-        sd_img = singledish_observe_image(chan, pixel_scale, lowresfwhm)
+        sd_img = singledish_observe_image(chan, pixel_scale, Beam(lowresfwhm))
 
         interf_img = \
             interferometrically_observe_image(chan, pixel_scale,
