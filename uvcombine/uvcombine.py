@@ -525,7 +525,7 @@ def feather_simple(hires, lores,
         proj_hi = hires
 
     if isinstance(lores, str):
-        hdu_lo = fits.open(lores)[highresextnum]
+        hdu_lo = fits.open(lores)[lowresextnum]
         proj_lo = Projection.from_hdu(hdu_lo)
     elif isinstance(lores, fits.PrimaryHDU):
         proj_lo = Projection.from_hdu(lores)
