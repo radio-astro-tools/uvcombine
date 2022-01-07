@@ -576,7 +576,7 @@ def feather_simple(hires, lores,
 
     fftsum, combo = fftmerge(kfft, ikfft,
                              proj_hi.value * highresscalefactor * weights,
-                             proj_lo.value * lowresscalefactor * weights,
+                             proj_lo_regrid.value * lowresscalefactor * weights,
                              replace_hires=replace_hires,
                              lowpassfilterSD=lowpassfilterSD,
                              deconvSD=deconvSD,
