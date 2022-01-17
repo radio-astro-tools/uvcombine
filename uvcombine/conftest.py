@@ -119,7 +119,7 @@ def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
     # Make SD image
     sd_header = input_hdu.header.copy()
 
-    major = 33*units.arcsec
+    major = 15*units.arcsec
     sd_beam = Beam(major=major)
     sd_header.update(sd_beam.to_header_keywords())
 
