@@ -54,11 +54,11 @@ def test_scale_factor_sigclip(fake_overlap_samples):
 def test_SDeff_beam(plaw_test_data):
 
     largest_scale = 56 * u.arcsec
-    lowresfwhm = 30.*u.arcsec
+    lowresfwhm = 25.*u.arcsec
 
     orig_hdu, lowres_hdu, highres_hdu = plaw_test_data
 
-    lowresfwhms = np.arange(20, 40, 2) * u.arcsec
+    lowresfwhms = np.arange(20, 30, 1) * u.arcsec
 
     slopes, slopes_CI = \
         find_effSDbeam(highres_hdu, lowres_hdu, largest_scale,
@@ -66,16 +66,17 @@ def test_SDeff_beam(plaw_test_data):
                        beam_divide_lores=True,
                        lowpassfilterSD=False,
                        min_beam_fraction=0.1,
-                       alpha=0.85,
+                       alpha=0.99,
                        verbose=False)
 
-    # Smallest slope should be the actual FWHM of 30''
+    # Smallest slope should be the actual FWHM of 25''
     # However, there's some uncertainty to deal with and there's a quadratic
     # behaviour if the SD beam size is overestimated by ~>40%.
     # Because of this, we check for the smallest negative value within 1-sigma uncertainty
     # of slope=0.
-    estimated_lowresfwhm = lowresfwhms[np.where(slopes_CI[1] >= 0.)][0]
-    assert estimated_lowresfwhm == lowresfwhm
+    within_zero = np.logical_and(slopes_CI[0] < 0., slopes_CI[1] > 0.)
+    estimated_lowresfwhm = lowresfwhms[within_zero]
+    assert (estimated_lowresfwhm == lowresfwhm).sum() == 1
 
     # See note above. This check can fail due to the quadratic behaviour for too
     # large lowresfwhms
