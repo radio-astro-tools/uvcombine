@@ -109,12 +109,6 @@ from .uvcombine import feather_compare
 
 #     newmap = np.fft.irfft2(output)
 
-#     # amp = 10.
-#     # newmap /= (np.sqrt(np.sum(newmap**2)) / np.sqrt(newmap.size)) / amp
-
-#     # newmap += 5 * newmap.std()
-#     # newmap[newmap < 0.0] = 0.
-
 #     return newmap
 
 def make_extended(imsize, powerlaw=2.0, seed=0):
@@ -192,14 +186,14 @@ def interferometrically_observe_image(image, pixel_scale,
 
     return im_interferometered, ring
 
-def singledish_observe_image(image, pixel_scale, beam):
+def singledish_observe_image(image, pixel_scale, beam, boundary='fill'):
     """
     Given an array image with a specified pixel scale, interferometrically
     observe that image.
 
     Parameters
     ----------
-    image : np.array
+    image : np.array or `~spectral_cube.Projection`
         The image array (should be a numpy array, not a quantity array)
     pixel_scale : u.arcsec equivalent
         The (square) pixel size in arcsec.
@@ -212,14 +206,19 @@ def singledish_observe_image(image, pixel_scale, beam):
         The image array resulting from smoothing the input image
     """
 
-    kernel = beam.as_kernel(pixel_scale)
+    if hasattr(image, 'wcs'):
+        singledish_im = image.convolve_to(beam, boundary=boundary)
 
-    # create the single-dish map by convolving the image with a FWHM=40" kernel
-    # (this interpretation is much easier than the sharp-edged stuff in fourier
-    # space because the kernel is created in real space)
-    singledish_im = convolution.convolve_fft(image,
-                                             kernel=kernel,
-                                             boundary='fill', fill_value=image.mean())
+    else:
+        kernel = beam.as_kernel(pixel_scale)
+
+        # create the single-dish map by convolving the image with a FWHM=40" kernel
+        # (this interpretation is much easier than the sharp-edged stuff in fourier
+        # space because the kernel is created in real space)
+        singledish_im = convolution.convolve_fft(image,
+                                                kernel=kernel,
+                                                boundary=boundary,
+                                                fill_value=image.mean())
 
     return singledish_im
 
@@ -227,6 +226,7 @@ def singledish_observe_image(image, pixel_scale, beam):
 def generate_test_fits(imsize, powerlaw, beamfwhm,
                        pixel_scale=1 * u.arcsec,
                        restfreq=100 * u.GHz,
+                       brightness_unit=u.Jy/u.beam,
                        seed=32788324):
     """
     Create a FITS image using ``image_registration``'s toolkit for producing
@@ -262,7 +262,8 @@ def generate_test_fits(imsize, powerlaw, beamfwhm,
 
     im = make_extended(imsize=imsize, powerlaw=powerlaw, seed=seed)
 
-    header = generate_header(pixel_scale, beamfwhm, imsize, restfreq)
+    header = generate_header(pixel_scale, beamfwhm, imsize, restfreq,
+                             bunit=brightness_unit)
 
     hdu = fits.PrimaryHDU(data=im, header=header)
 
@@ -283,9 +284,10 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
               'CRVAL2': 0.0,
               'CTYPE1': 'GLON-CAR',
               'CTYPE2': 'GLAT-CAR',
-              'CUNIT1': 'deg',
-              'CUNIT2': 'deg',
+              'CUNIT1': 'deg     ',
+              'CUNIT2': 'deg     ',
               'BUNIT': bunit.to_string(),
+              'RESTFRQ':  restfreq.to(u.Hz).value
               }
 
     if with_specaxis:
@@ -294,7 +296,6 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
         header['CDELT3'] = 1e6  # 1 MHz; doesn't matter
         header['CRPIX3'] = 1
         header['CTYPE3'] = 'FREQ'
-        header['RESTFRQ'] = restfreq.to(u.Hz).value
 
     return fits.Header(header)
 
