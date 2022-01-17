@@ -270,7 +270,7 @@ def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
 
     # sigma in pixels
     sigma = ((lowresfwhm/fwhm/(pixscale)).decompose().value)
-    log.info(f"sigma: {sigma}, lowresfwhm: {lowresfwhm}, pixscale: {pixscale}")
+    # log.info(f"sigma: {sigma}, lowresfwhm: {lowresfwhm}, pixscale: {pixscale}")
 
     # not used, just noted that these are the theoretical values (...maybe...)
     #sigma_fftspace = (1/(4*np.pi**2*sigma**2))**0.5
