@@ -53,7 +53,7 @@ def plaw_test_data():
                                 powerlawindex=1.5,
                                 largest_scale=56. * units.arcsec,
                                 smallest_scale=3. * units.arcsec,
-                                lowresfwhm=30. * units.arcsec,
+                                lowresfwhm=25. * units.arcsec,
                                 pixel_scale=1 * units.arcsec,
                                 imsize=512)
 
