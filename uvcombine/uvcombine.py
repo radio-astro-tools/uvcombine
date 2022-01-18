@@ -560,6 +560,12 @@ def feather_simple(hires, lores,
 
         proj_lo = proj_lo.to(proj_hi.unit)
 
+        # When in a per-beam unit, we need to scale the low res to the
+        # Jy / beam for the HIRES beam.
+        jybm_unit = u.Jy / u.beam
+        if proj_hi.unit.is_equivalent(jybm_unit):
+            proj_lo *= (proj_hi.beam.sr / proj_lo.beam.sr).decompose().value
+
     # Add check that the units are compatible
     equiv_units = proj_lo.unit.is_equivalent(proj_hi.unit)
     if not equiv_units:
