@@ -35,6 +35,12 @@ def make_extended(imsize, powerlaw=2.0,
         be returned. If `full_fft=False`, the RFFT is returned.
     randomseed: int, optional
         Seed for random number generator.
+    make_positive : bool, optional
+        To mimic an image of the sky, add the smallest value to the data
+        to ensure all values are positive. This marginally causes deviations
+        from the set powerlaw index. Default is True.
+    scale_factor : float, optional
+        Arbitrary scaling factor to apply to the data.
 
     Returns
     -------
