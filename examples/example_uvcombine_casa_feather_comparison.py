@@ -35,7 +35,7 @@ restfreq = 100 * units.GHz
 highres_major = 2 * units.arcsec
 
 # Generate input image
-input_hdu = generate_test_fits(imsize=512, powerlaw=1.5,
+input_hdu = generate_test_fits(imsize=512, powerlaw=3.0,
                                beamfwhm=highres_major,
                                pixel_scale=pixel_scale,
                                restfreq=restfreq,
