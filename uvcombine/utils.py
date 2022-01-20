@@ -117,7 +117,7 @@ def make_extended(imsize, powerlaw=2.0,
     newmap = np.fft.irfft2(output)
 
     if make_positive:
-        newmap -= newmap.min()
+        newmap -= 1.1 * newmap.min()
 
     newmap *= scale_factor
 
