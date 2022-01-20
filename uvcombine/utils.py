@@ -5,13 +5,15 @@ from astropy import convolution
 from astropy.io import fits
 from astropy import units as u
 from spectral_cube import SpectralCube
+from radio_beam import Beam
 
 
 from .uvcombine import feather_compare
 
 
 def make_extended(imsize, powerlaw=2.0,
-                  return_fft=False, full_fft=True, seed=32788324):
+                  return_fft=False, full_fft=True, seed=32788324,
+                  make_positive=True, scale_factor=1.e8):
     '''
 
     Generate a 2D power-law image with a specified index and random phases.
@@ -33,6 +35,12 @@ def make_extended(imsize, powerlaw=2.0,
         be returned. If `full_fft=False`, the RFFT is returned.
     randomseed: int, optional
         Seed for random number generator.
+    make_positive : bool, optional
+        To mimic an image of the sky, add the smallest value to the data
+        to ensure all values are positive. This marginally causes deviations
+        from the set powerlaw index. Default is True.
+    scale_factor : float, optional
+        Arbitrary scaling factor to apply to the data.
 
     Returns
     -------
@@ -108,8 +116,35 @@ def make_extended(imsize, powerlaw=2.0,
 
     newmap = np.fft.irfft2(output)
 
+    if make_positive:
+        newmap -= 1.1 * newmap.min()
+
+    newmap *= scale_factor
+
     return newmap
 
+# Keeping here as an example of the old make_extended.
+# def make_extended(imsize, powerlaw=2.0, seed=0):
+#     imsize = int(imsize)
+#     imsize2=imsize
+
+#     yy,xx = np.indices((imsize2,imsize), dtype='float')
+#     xcen = imsize/2.-(1.-imsize % 2)
+#     ycen = imsize2/2.-(1.-imsize2 % 2)
+#     yy -= ycen
+#     xx -= xcen
+#     rr = (xx**2+yy**2)**0.5
+
+#     # flag out the bad point to avoid warnings
+#     rr[rr == 0] = np.nan
+
+#     powermap = (np.random.randn(imsize2, imsize) * rr**(-powerlaw)+
+#                 np.random.randn(imsize2, imsize) * rr**(-powerlaw) * 1j)
+#     powermap[powermap!=powermap] = 0
+
+#     newmap = np.abs(np.fft.fftshift(np.fft.fft2(powermap)))
+
+#     return newmap
 
 def interferometrically_observe_image(image, pixel_scale,
                                       largest_angular_scale,
@@ -164,19 +199,19 @@ def interferometrically_observe_image(image, pixel_scale,
 
     return im_interferometered, ring
 
-def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
+def singledish_observe_image(image, pixel_scale, beam, boundary='fill'):
     """
     Given an array image with a specified pixel scale, interferometrically
     observe that image.
 
     Parameters
     ----------
-    image : np.array
+    image : np.array or `~spectral_cube.Projection`
         The image array (should be a numpy array, not a quantity array)
     pixel_scale : u.arcsec equivalent
         The (square) pixel size in arcsec.
-    smallest_angular_scale : u.arcsec equivalent
-        The beam of the image.  This is interpreted as the FWHM of a gaussian.
+    beam : `~radio_beam.Beam`
+        The beam of the image.
 
     Returns
     -------
@@ -184,15 +219,19 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
         The image array resulting from smoothing the input image
     """
 
-    FWHM_CONSTANT = (8*np.log(2))**0.5
-    kernel = convolution.Gaussian2DKernel(smallest_angular_scale/FWHM_CONSTANT/pixel_scale)
+    if hasattr(image, 'wcs'):
+        singledish_im = image.convolve_to(beam, boundary=boundary)
 
-    # create the single-dish map by convolving the image with a FWHM=40" kernel
-    # (this interpretation is much easier than the sharp-edged stuff in fourier
-    # space because the kernel is created in real space)
-    singledish_im = convolution.convolve_fft(image,
-                                             kernel=kernel,
-                                             boundary='fill', fill_value=image.mean())
+    else:
+        kernel = beam.as_kernel(pixel_scale)
+
+        # create the single-dish map by convolving the image with a FWHM=40" kernel
+        # (this interpretation is much easier than the sharp-edged stuff in fourier
+        # space because the kernel is created in real space)
+        singledish_im = convolution.convolve_fft(image,
+                                                kernel=kernel,
+                                                boundary=boundary,
+                                                fill_value=image.mean())
 
     return singledish_im
 
@@ -200,6 +239,7 @@ def singledish_observe_image(image, pixel_scale, smallest_angular_scale):
 def generate_test_fits(imsize, powerlaw, beamfwhm,
                        pixel_scale=1 * u.arcsec,
                        restfreq=100 * u.GHz,
+                       brightness_unit=u.Jy/u.beam,
                        seed=32788324):
     """
     Create a FITS image using ``image_registration``'s toolkit for producing
@@ -235,7 +275,8 @@ def generate_test_fits(imsize, powerlaw, beamfwhm,
 
     im = make_extended(imsize=imsize, powerlaw=powerlaw, seed=seed)
 
-    header = generate_header(pixel_scale, beamfwhm, imsize, restfreq)
+    header = generate_header(pixel_scale, beamfwhm, imsize, restfreq,
+                             bunit=brightness_unit)
 
     hdu = fits.PrimaryHDU(data=im, header=header)
 
@@ -254,11 +295,12 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
               'CRPIX2': imsize / 2.,
               'CRVAL1': 0.0,
               'CRVAL2': 0.0,
-              'CTYPE1': 'GLON-CAR',
-              'CTYPE2': 'GLAT-CAR',
-              'CUNIT1': 'deg',
-              'CUNIT2': 'deg',
+              'CTYPE1': 'RA---SIN',
+              'CTYPE2': 'DEC--SIN',
+              'CUNIT1': 'deg     ',
+              'CUNIT2': 'deg     ',
               'BUNIT': bunit.to_string(),
+              'RESTFRQ':  restfreq.to(u.Hz).value
               }
 
     if with_specaxis:
@@ -267,7 +309,6 @@ def generate_header(pixel_scale, beamfwhm, imsize, restfreq, with_specaxis=False
         header['CDELT3'] = 1e6  # 1 MHz; doesn't matter
         header['CRPIX3'] = 1
         header['CTYPE3'] = 'FREQ'
-        header['RESTFRQ'] = restfreq.to(u.Hz).value
 
     return fits.Header(header)
 
@@ -285,7 +326,7 @@ def generate_testing_data(return_images=True,
 
     restfreq = (2 * u.mm).to(u.GHz, u.spectral())
 
-    sd_img = singledish_observe_image(orig_img, pixel_scale, lowresfwhm)
+    sd_img = singledish_observe_image(orig_img, pixel_scale, Beam(lowresfwhm))
 
     interf_img = \
         interferometrically_observe_image(orig_img, pixel_scale,
@@ -341,7 +382,7 @@ def generate_test_cube(return_hdu=False,
     for i in range(nchan):
         chan = make_extended(imsize, powerlawindex, seed=seed)
 
-        sd_img = singledish_observe_image(chan, pixel_scale, lowresfwhm)
+        sd_img = singledish_observe_image(chan, pixel_scale, Beam(lowresfwhm))
 
         interf_img = \
             interferometrically_observe_image(chan, pixel_scale,

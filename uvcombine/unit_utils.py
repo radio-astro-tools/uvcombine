@@ -24,7 +24,7 @@ def convert_to_casa(hdu):
     elif u.Unit(hdu.header['BUNIT']).is_equivalent(u.MJy/u.sr):
         hdu.data = u.Quantity(hdu.data,
                               u.Unit(hdu.header['BUNIT'])).to(u.Jy/beam).value
-    elif hdu.header['BUNIT'] != 'Jy/beam':
+    elif hdu.header['BUNIT'] not in ('Jy/beam', 'Jy / beam', 'beam-1 Jy'): # all are OK?
         raise ValueError("Header BUNIT not recognized")
 
     hdu.header['BUNIT'] = 'Jy/beam'
