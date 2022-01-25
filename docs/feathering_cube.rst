@@ -12,5 +12,5 @@ This method is appropriate for two cube, each with a single beam size (i.e., the
 does not change between spectal channels). The low resolution beam size is also set
 using `lowresfwhm`, and is NOT currently read from the FITS header.
 
-We anticipate adding more features for combing spectral-cubes with an updated function
+We anticipate adding more features for combining spectral-cubes with an updated function
 and interface in the near future.
