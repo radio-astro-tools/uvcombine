@@ -8,7 +8,7 @@ from spectral_cube import SpectralCube
 from radio_beam import Beam
 
 
-from .uvcombine import feather_compare
+from . import feather_compare
 
 
 def make_extended(imsize, powerlaw=2.0,
