@@ -6,7 +6,7 @@ Feathering two images
 `~uvcombine.feather_simple` is the primary function for feathering.
 
 Images can be passed as a FITS filename (as a string), FITS HDU, or a `~spectral_cube.Projection`.
-The latter is recommended to allow close check of the beam sizes passed for the high- and
+The latter is recommended to allow for a close check of the beam sizes passed for the high- and
 low-resolution data.
 
 In the simplest case, a low- and high-resolution image can be feathered with::
