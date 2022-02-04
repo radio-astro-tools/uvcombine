@@ -1158,7 +1158,8 @@ def feather_compare(hires, lores,
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     nax2, nax1 = proj_hi.shape
-    pixscale = np.abs(proj_hi.wcs.celestial.proj_plane_pixel_scales()[0])
+    w = astropy.wcs.WCS(proj_hi.header).celestial
+    pixscale = np.abs(astropy.wcs.utils.proj_plane_pixel_scales(w)[0])
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
