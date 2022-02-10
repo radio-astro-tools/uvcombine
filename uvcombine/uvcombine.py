@@ -8,7 +8,8 @@ from astropy import units as u
 from astropy import log
 from astropy.utils.console import ProgressBar
 import numpy as np
-from astropy import wcs,stats
+from astropy import wcs
+from astropy import stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
 
@@ -135,7 +136,7 @@ def match_flux_units(image, image_header, target_header):
             equivalency = u.brightness_temperature(beam_area=image_beam,
                                                    frequency=cfreq_in,)
         elif image_unit.is_equivalent(u.Jy/u.pixel):
-            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs.celestial)*u.deg**2
             image_unit = image_unit.bases[0]
             equivalency = u.brightness_temperature(beam_area=pixel_area,
                                                    frequency=cfreq_in,)
@@ -158,7 +159,7 @@ def match_flux_units(image, image_header, target_header):
         elif image_unit.is_equivalent(u.Jy/u.beam):
             image_unit = image_unit.bases[0] / image_beam.sr
         elif image_unit.is_equivalent(u.Jy/u.pixel):
-            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs)*u.deg**2
+            pixel_area = wcs.utils.proj_plane_pixel_area(im_wcs.celestial)*u.deg**2
             image_unit = image_unit.bases[0] / pixel_area
 
     log.info("Converting data from {0} to {1}".format(image_unit, target_unit))
@@ -211,7 +212,7 @@ def regrid(hd1, im1, im2raw, hd2):
         raise ValueError("`fourier_combine_cubes` requires the input"
                          "images to have square pixels.")
 
-    pixscale = wcs_hi.celestial.proj_plane_pixel_scales()[0]
+    pixscale = wcs.utils.proj_plane_pixel_scales(wcs_hi.celestial)[0]
     log.debug('pixscale = {0} deg'.format(pixscale))
 
     # read the image array size from the high resolution image
@@ -377,7 +378,7 @@ def simple_deconvolve_sdim(hdu, lowresfwhm, minval=1e-1):
     proj = Projection.from_hdu(hdu)
 
     nax2, nax1 = proj.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs.celestial)**0.5
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
@@ -399,7 +400,7 @@ def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
     proj = Projection.from_hdu(hdu)
 
     nax2, nax1 = proj.shape
-    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs)**0.5
+    pixscale = wcs.utils.proj_plane_pixel_area(proj.wcs.celestial)**0.5
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
@@ -578,7 +579,7 @@ def feather_simple(hires, lores,
     if pbresponse is not None:
         proj_lo_regrid *= pbresponse
 
-    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    pixscale = wcs.utils.proj_plane_pixel_scales(proj_hi.wcs.celestial)[0]
     nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
 
@@ -700,7 +701,7 @@ def feather_plot(hires, lores,
         lowresfwhm = beam_low.major
         log.info("Low-res FWHM: {0}".format(lowresfwhm))
 
-    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    pixscale = wcs.utils.proj_plane_pixel_scales(proj_hi.wcs.celestial)[0]
 
     nax2, nax1 = proj_hi.shape
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
@@ -1023,7 +1024,7 @@ def fourier_combine_cubes(cube_hi, cube_lo,
         raise ValueError("`fourier_combine_cubes` requires the input"
                          "images to have square pixels.")
 
-    pixscale = cube_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
 
     cube_lo = cube_lo.to(cube_hi.unit)
 
@@ -1158,8 +1159,7 @@ def feather_compare(hires, lores,
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     nax2, nax1 = proj_hi.shape
-    w = astropy.wcs.WCS(proj_hi.header).celestial
-    pixscale = np.abs(astropy.wcs.utils.proj_plane_pixel_scales(w)[0])
+    pixscale = np.abs(wcs.utils.proj_plane_pixel_scales(proj_hi.wcs.celestial)[0])
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
@@ -1290,7 +1290,7 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
     proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     nax2, nax1 = proj_hi.shape
-    pixscale = proj_hi.wcs.celestial.proj_plane_pixel_scales()[0]
+    pixscale = wcs.utils.proj_plane_pixel_scales(proj_hi.wcs.celestial)[0]
 
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
     kfft = np.fft.fftshift(kfft)
