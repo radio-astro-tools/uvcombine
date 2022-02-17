@@ -1136,17 +1136,25 @@ def feather_compare(hires, lores,
     if LAS <= SAS:
         raise ValueError("Must have LAS > SAS. Check the input parameters.")
 
-    if isinstance(hires, str):
-        hdu_hi = fits.open(hires)[highresextnum]
-    else:
-        hdu_hi = hires
-    proj_hi = Projection.from_hdu(hdu_hi)
+    if not isinstance(hires, Projection):
+        if isinstance(hires, str):
+            hdu_hi = fits.open(hires)[highresextnum]
+        else:
+            hdu_hi = hires
+        proj_hi = Projection.from_hdu(hdu_hi)
 
-    if isinstance(lores, str):
-        hdu_lo = fits.open(lores)[lowresextnum]
     else:
-        hdu_lo = lores
-    proj_lo = Projection.from_hdu(hdu_lo)
+        proj_hi = hires
+
+    if not isinstance(lores, Projection):
+        if isinstance(lores, str):
+            hdu_lo = fits.open(lores)[lowresextnum]
+        else:
+            hdu_lo = lores
+        proj_lo = Projection.from_hdu(hdu_lo)
+
+    else:
+        proj_lo = lores
 
     # If weights are given, they must match the shape of the hires data
     if weights is not None:
