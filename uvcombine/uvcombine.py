@@ -975,7 +975,6 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 
 def feather_simple_cube(hires, lores,
                         allow_spectral_resample=True,
-
                         **kwargs):
     """
     Parameters
@@ -1005,11 +1004,12 @@ def feather_simple_cube(hires, lores,
         lslc = lores[ii]
 
         feath = feather_simple(hslc, lslc, **kwargs)
-        feathcube.append(feath)
+        feathcube.append(feath.real)
         pb.update()
 
-    newcube = SpectralCube(data=np.array(feathcube).real, header=hires.header,
-            wcs=hires.wcs)
+    newcube = SpectralCube(data=np.array(feathcube) * hires.unit,
+                           header=hires.header,
+                           wcs=hires.wcs)
 
     return newcube
 
@@ -1068,6 +1068,11 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
 
     cube_lo = cube_lo.to(cube_hi.unit)
+    # When in a per-beam unit, we need to scale the low res to the
+    # Jy / beam for the HIRES beam.
+    jybm_unit = u.Jy / u.beam
+    if cube_hi.unit.is_equivalent(jybm_unit):
+        cube_lo *= (cube_hi.beam.sr / cube_lo.beam.sr).decompose().value
 
     assert cube_hi.unit == cube_lo.unit, 'Cubes must have same or equivalent unit'
     assert cube_hi.unit.is_equivalent(u.Jy/u.beam) or cube_hi.unit.is_equivalent(u.K), "Cubes must have brightness units."
@@ -1107,6 +1112,7 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     elif return_hdu:
         output_header = wcs_hi.to_header()
         output_header['BUNIT'] = cube_hi.unit.to_string()
+        output_header.update(cube_hi.beam.to_header_keywords())
         return fits.PrimaryHDU(data=outcube, header=output_header)
     else:
         return outcube
