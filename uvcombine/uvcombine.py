@@ -972,6 +972,37 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
+def feather_simple_cube(hires, lores, **kwargs):
+    """
+    Parameters
+    ----------
+    hires : cube
+    lores : cube
+    TODO:
+      * Can we paralellize, daskify, or otherwise not-in-memory-ify this?
+    """
+
+    if not hasattr(hires, shape):
+        hires = SpectralCube.read(hires)
+    if not hasattr(hires, shape):
+        lores = SpectralCube.read(lores)
+
+    if lores.shape[0]!=hires.shape[0] or not all(lores.spectral_axis == hires.spectral_axis):
+        lores = lores.spectral_interpolate(hires.spectral_axis)
+
+    feathcube = []
+    pb = ProgressBar(len(hires))
+    for hslc, lslc in zip(hires, lores):
+        feath = feather_simple(hslc.hdu, lslc.hdu)
+        feathcube.append(feath)
+        pb.update()
+
+    newcube = SpectralCube(data=np.array(feathcube).real, header=hires.header,
+            wcs=hires.wcs)
+
+    return newcube
+
+
 def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
