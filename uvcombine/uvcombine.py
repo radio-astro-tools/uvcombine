@@ -1104,6 +1104,12 @@ def feather_compare(hires, lores,
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
+    highresextnum : int, optional
+        Select the HDU when passing a multi-HDU FITS file for the high-resolution
+        data.
+    lowresextnum : int, optional
+        Select the HDU when passing a multi-HDU FITS file for the low-resolution
+        data.
     beam_divide_lores: bool
         Divide the low-resolution data by the beam weight before plotting?
         (should do this: otherwise, you are plotting beam-downweighted data)
