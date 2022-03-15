@@ -24,6 +24,16 @@ def test_feather_simple(plaw_test_data):
 
     combo = feather_simple(highres_proj, lowres_proj)
 
+    # Assert the combined data is sufficiently close to the original
+    orig_data = orig_hdu.data
+
+    # This won't work on a pixel basis as we can't exclude outliers
+    # npt.assert_allclose(orig_data, combo.real)
+
+    # Test against flux recovery
+    frac_diff = (orig_data - combo.real).sum() / orig_data.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
 
 def test_feather_simple_mismatchunit(plaw_test_data):
 
@@ -36,7 +46,7 @@ def test_feather_simple_mismatchunit(plaw_test_data):
         combo = feather_simple(highres_hdu, lowres_hdu, match_units=False)
 
 
-def test_feather_simple_cube(plaw_test_cube_sc):
+def test_fourier_combine_cubes(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
@@ -48,8 +58,12 @@ def test_feather_simple_cube(plaw_test_cube_sc):
 
     assert combo_cube_sc.unit == interf_cube.unit
 
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
 
-def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+
+def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
@@ -64,6 +78,12 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
     # Output units should in the units of the interferometer cube
     assert combo_cube_sc.unit == interf_cube.unit
 
+    combo_cube_sc_smunits = combo_cube_sc.to(orig_cube.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc_smunits).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
 
 def test_feather_simple_cube(plaw_test_cube_sc):
 
@@ -74,6 +94,10 @@ def test_feather_simple_cube(plaw_test_cube_sc):
     assert orig_cube.shape == combo_cube_sc.shape
 
     assert combo_cube_sc.unit == interf_cube.unit
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
 def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
@@ -88,3 +112,9 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
 
     # Output units should in the units of the interferometer cube
     assert combo_cube_sc.unit == interf_cube.unit
+
+    combo_cube_sc_smunits = combo_cube_sc.to(orig_cube.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc_smunits).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
