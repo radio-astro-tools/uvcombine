@@ -6,7 +6,8 @@ import numpy.testing as npt
 import numpy as np
 from spectral_cube import Projection, SpectralCube
 
-from ..uvcombine import feather_simple, fourier_combine_cubes
+from ..uvcombine import (feather_simple, fourier_combine_cubes,
+                         feather_simple_cube)
 
 
 def test_feather_simple(plaw_test_data):
@@ -57,6 +58,31 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
     combo_cube = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
 
     combo_cube_sc = SpectralCube.read(combo_cube)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    # Output units should in the units of the interferometer cube
+    assert combo_cube_sc.unit == interf_cube.unit
+
+
+def test_feather_simple_cube(plaw_test_cube_sc):
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+
+
+def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    interf_cube = interf_cube.to(u.Jy / u.beam)
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
