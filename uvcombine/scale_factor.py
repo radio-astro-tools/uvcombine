@@ -189,7 +189,7 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
         if verbose:
             import matplotlib.pyplot as pl
             pl.hist(log_ratio, bins=int(np.sqrt(lowres_pts.size)), alpha=0.7,
-                    normed=True)
+                    density=True)
             x_vals = np.arange(-3, 3, 0.05)
             pl.plot(x_vals, stats.cauchy.pdf(x_vals, *params))
             pl.xlabel("log Ratio")
