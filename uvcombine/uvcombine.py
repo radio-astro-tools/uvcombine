@@ -1,4 +1,5 @@
 
+from multiprocessing.sharedctypes import Value
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -972,7 +973,10 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
-def feather_simple_cube(hires, lores, **kwargs):
+def feather_simple_cube(hires, lores,
+                        allow_spectral_resample=True,
+
+                        **kwargs):
     """
     Parameters
     ----------
@@ -982,18 +986,25 @@ def feather_simple_cube(hires, lores, **kwargs):
       * Can we paralellize, daskify, or otherwise not-in-memory-ify this?
     """
 
-    if not hasattr(hires, shape):
+    if not hasattr(hires, 'shape'):
         hires = SpectralCube.read(hires)
-    if not hasattr(hires, shape):
+    if not hasattr(hires, 'shape'):
         lores = SpectralCube.read(lores)
 
     if lores.shape[0]!=hires.shape[0] or not all(lores.spectral_axis == hires.spectral_axis):
-        lores = lores.spectral_interpolate(hires.spectral_axis)
+        if allow_spectral_resample:
+            lores = lores.spectral_interpolate(hires.spectral_axis)
+        else:
+            raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
+                             "spectrally match the low resolution to high resolution data.")
 
     feathcube = []
     pb = ProgressBar(len(hires))
-    for hslc, lslc in zip(hires, lores):
-        feath = feather_simple(hslc.hdu, lslc.hdu, **kwargs)
+    for ii in range(hires.shape[0]):
+        hslc = hires[ii]
+        lslc = lores[ii]
+
+        feath = feather_simple(hslc, lslc, **kwargs)
         feathcube.append(feath)
         pb.update()
 
