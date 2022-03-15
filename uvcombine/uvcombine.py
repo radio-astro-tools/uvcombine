@@ -993,7 +993,7 @@ def feather_simple_cube(hires, lores, **kwargs):
     feathcube = []
     pb = ProgressBar(len(hires))
     for hslc, lslc in zip(hires, lores):
-        feath = feather_simple(hslc.hdu, lslc.hdu)
+        feath = feather_simple(hslc.hdu, lslc.hdu, **kwargs)
         feathcube.append(feath)
         pb.update()
 
