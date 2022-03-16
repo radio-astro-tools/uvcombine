@@ -6,6 +6,9 @@ import numpy.testing as npt
 import numpy as np
 from spectral_cube import Projection, SpectralCube
 
+# Use sklearn to bring in metrics of image similarity
+from skimage.metrics import structural_similarity, normalized_root_mse
+
 from ..uvcombine import (feather_simple, fourier_combine_cubes,
                          feather_simple_cube)
 
@@ -33,6 +36,15 @@ def test_feather_simple(plaw_test_data):
     # Test against flux recovery
     frac_diff = (orig_data - combo.real).sum() / orig_data.sum()
     npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    # Test against normalized_root_mse using the Euclidean metric
+    # Roughly a fractional difference using the feathered data as source of "error"
+    nmse = normalized_root_mse(orig_data, combo.real, normalization='euclidean')
+    assert nmse < 1e-1
+
+    # Test against structural similarity metric
+    ssim = structural_similarity(orig_data, combo.real)
+    assert ssim > 0.8
 
 
 @pytest.mark.parametrize(('lounit', 'hiunit'),
@@ -130,6 +142,21 @@ def test_feather_simple_cube(plaw_test_cube_sc):
     # Test against flux recovery
     frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
     npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    # Test against normalized_root_mse using the Euclidean metric
+    # Roughly a fractional difference using the feathered data as source of "error"
+    nmse = normalized_root_mse(orig_cube.unitless_filled_data[:],
+                               combo_cube_sc.unitless_filled_data[:],
+                               normalization='euclidean')
+    assert nmse < 3e-2
+
+    # Test against structural similarity metric
+    # Compare channel vs. channel
+    for ii in range(orig_cube.shape[0]):
+        ssim = structural_similarity(orig_cube.unitless_filled_data[ii],
+                                    combo_cube_sc.unitless_filled_data[ii],
+                                    )
+        assert ssim > 0.99
 
 
 def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
