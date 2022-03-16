@@ -35,6 +35,38 @@ def test_feather_simple(plaw_test_data):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
+@pytest.mark.parametrize(('lounit', 'hiunit'),
+                         ((u.K, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.K),
+                          (u.MJy / u.sr, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.MJy / u.sr),
+                          (u.MJy / u.sr, u.K),
+                          (u.K, u.MJy / u.sr),
+                          (u.Jy / u.pixel, u.MJy / u.sr),
+                          (u.MJy / u.sr, u.Jy / u.pixel),
+                          (u.Jy / u.pixel, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.Jy / u.pixel),
+                          (u.Jy / u.pixel, u.K),
+                          (u.K, u.Jy / u.pixel)))
+def test_feather_simple_varyunits(plaw_test_data, lounit, hiunit):
+
+    orig_hdu, lowres_hdu, highres_hdu = plaw_test_data
+
+    orig_proj = Projection.from_hdu(orig_hdu)
+
+    # Projection input
+    lowres_proj = Projection.from_hdu(lowres_hdu).to(lounit)
+    highres_proj = Projection.from_hdu(highres_hdu).to(hiunit)
+
+    combo = feather_simple(highres_proj, lowres_proj, return_hdu=True)
+
+    combo_proj = Projection.from_hdu(combo).to(orig_proj.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_proj - combo_proj).sum() / orig_proj.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+
 def test_feather_simple_mismatchunit(plaw_test_data):
 
     orig_hdu, lowres_hdu, highres_hdu = plaw_test_data
