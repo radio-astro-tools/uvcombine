@@ -44,7 +44,7 @@ def test_feather_simple(plaw_test_data):
 
     # Test against structural similarity metric
     ssim = structural_similarity(orig_data, combo.real)
-    assert ssim > 0.8
+    assert ssim > 0.99
 
 
 @pytest.mark.parametrize(('lounit', 'hiunit'),
