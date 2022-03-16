@@ -40,7 +40,7 @@ def test_feather_simple(plaw_test_data):
     # Test against normalized_root_mse using the Euclidean metric
     # Roughly a fractional difference using the feathered data as source of "error"
     nmse = normalized_root_mse(orig_data, combo.real, normalization='euclidean')
-    assert nmse < 1e-1
+    assert nmse < 3e-2
 
     # Test against structural similarity metric
     ssim = structural_similarity(orig_data, combo.real)
