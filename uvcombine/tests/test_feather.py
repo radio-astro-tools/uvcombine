@@ -177,3 +177,27 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
     # Test against flux recovery
     frac_diff = (orig_cube - combo_cube_sc_smunits).sum() / orig_cube.sum()
     npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+
+def test_feather_cube_consistency(plaw_test_cube_sc):
+    '''
+    Before fourier_combine_cubes is fully deprecated, check consistency
+    with the output from feather_simple_cubes.
+    '''
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    combo_cube_fcc = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
+    combo_cube_fcc_sc = SpectralCube.read(combo_cube_fcc)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+
+    diff_cube = (combo_cube_sc - combo_cube_fcc_sc) / combo_cube_sc
+
+    assert diff_cube.max().value < 1e-10
+    assert np.abs(diff_cube.min().value) < 1e-10
+
