@@ -1034,7 +1034,8 @@ def feather_simple_cube(cube_hi, cube_lo,
 @deprecated("2022", message="Use feather_simple_cube.")
 def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
-                          lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
+                          lowresscalefactor=1.0,
+                          lowresfwhm=None,
                           return_regridded_cube_lo=False,
                           return_hdu=True,
                           maximum_cube_size=1e8,
@@ -1073,6 +1074,11 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     if cube_hi.size > maximum_cube_size:
         raise ValueError("Cube is probably too large "
                          "for this operation to work in memory")
+
+    if lowresfwhm is None:
+        beam_low = cube_lo.beam
+        lowresfwhm = beam_low.major
+
 
     im_hi = cube_hi._data # want the raw data for this
     hd_hi = cube_hi.header
