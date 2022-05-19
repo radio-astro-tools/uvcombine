@@ -973,45 +973,62 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
-def feather_simple_cube(hires, lores,
+def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         **kwargs):
     """
     Parameters
     ----------
-    hires : cube
-    lores : cube
-    TODO:
-      * Can we paralellize, daskify, or otherwise not-in-memory-ify this?
+    cube_hi : '~spectral_cube.SpectralCube' or str
+        The high-resolution spectral-cube or name of FITS file.
+    cube_lo : '~spectral_cube.SpectralCube' or str
+        The low-resolution spectral-cube or name of FITS file.
+    allow_spectral_resample : bool
+        If True, will run `~SpectralCube.spectral_interpolate` to match the spectral axes
+        of the data. Note that spectral smoothing may need to be first applied when downsampling
+        along the spectral axis; this should be applied to the input data prior to feathering.
+        If False, a ValueError is raised when the spectral axes of the cubes differ.
+    kwargs : Passed to `~feather_simple`.
+
+    Returns
+    -------
+    feathcube : '~spectral_cube.SpectralCube'
+        The combined feathered spectral cube.
+
     """
 
-    if not hasattr(hires, 'shape'):
-        hires = SpectralCube.read(hires)
-    if not hasattr(hires, 'shape'):
-        lores = SpectralCube.read(lores)
+    # TODO: Can we paralellize, daskify, or otherwise not-in-memory-ify this?
 
-    if lores.shape[0]!=hires.shape[0] or not all(lores.spectral_axis == hires.spectral_axis):
+    if not hasattr(cube_hi, 'shape'):
+        cube_hi = SpectralCube.read(cube_hi)
+    if not hasattr(cube_lo, 'shape'):
+        cube_lo = SpectralCube.read(cube_lo)
+
+    if cube_lo.shape[0]!=cube_hi.shape[0] or not all(cube_lo.spectral_axis == cube_hi.spectral_axis):
         if allow_spectral_resample:
-            lores = lores.spectral_interpolate(hires.spectral_axis)
+            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis)
         else:
             raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
                              "spectrally match the low resolution to high resolution data.")
 
-    feathcube = []
-    pb = ProgressBar(len(hires))
-    for ii in range(hires.shape[0]):
-        hslc = hires[ii]
-        lslc = lores[ii]
+    feath_array = np.empty(cube_hi.shape)
 
-        feath = feather_simple(hslc, lslc, **kwargs)
-        feathcube.append(feath.real)
+    pb = ProgressBar(cube_hi.shape[0])
+    for ii in range(cube_hi.shape[0]):
+
+        hslc = cube_hi[ii]
+        lslc = cube_lo[ii]
+
+        feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
+
         pb.update()
 
-    newcube = SpectralCube(data=np.array(feathcube) * hires.unit,
-                           header=hires.header,
-                           wcs=hires.wcs)
+    feathcube = SpectralCube(data=feath_array,
+                             header=cube_hi.header,
+                             wcs=cube_hi.wcs,
+                             meta=cube_hi.meta)
 
-    return newcube
+    return feathcube
 
 
 @deprecated("2022", message="Use feather_simple_cube.")
