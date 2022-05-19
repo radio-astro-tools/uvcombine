@@ -148,3 +148,9 @@ def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
     sd_proj.write(sd_fn, overwrite=True)
 
     return tmp_path, input_fn, intf_fn, sd_fn
+
+@pytest.fixture(params=[False, True])
+def use_memmap(request):
+    # Fixture to run tests that use this fixture with and without memmap for
+    # feathering cubes
+    return request.param
