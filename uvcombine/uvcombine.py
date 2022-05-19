@@ -975,6 +975,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 
 def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
+                        allow_huge_operations=False,
                         **kwargs):
     """
     Parameters
@@ -988,6 +989,10 @@ def feather_simple_cube(cube_hi, cube_lo,
         of the data. Note that spectral smoothing may need to be first applied when downsampling
         along the spectral axis; this should be applied to the input data prior to feathering.
         If False, a ValueError is raised when the spectral axes of the cubes differ.
+    allow_huge_operations : bool
+        Sets `~spectral_cube.SpectralCube.allow_huge_operations`. If True, no memory related
+        errors will be raise prior to computing. If False, an error will be raise if the cube
+        size is too large (currently set to ~1 GB in spectral-cube).
     kwargs : Passed to `~feather_simple`.
 
     Returns
@@ -1003,6 +1008,9 @@ def feather_simple_cube(cube_hi, cube_lo,
         cube_hi = SpectralCube.read(cube_hi)
     if not hasattr(cube_lo, 'shape'):
         cube_lo = SpectralCube.read(cube_lo)
+
+    cube_hi.allow_huge_operations = allow_huge_operations
+    cube_lo.allow_huge_operations = allow_huge_operations
 
     if cube_lo.shape[0]!=cube_hi.shape[0] or not all(cube_lo.spectral_axis == cube_hi.spectral_axis):
         if allow_spectral_resample:
