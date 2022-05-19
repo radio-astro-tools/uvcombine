@@ -1014,6 +1014,7 @@ def feather_simple_cube(hires, lores,
     return newcube
 
 
+@deprecated("2021", message="Use feather_simple_cube.")
 def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
@@ -1026,10 +1027,10 @@ def fourier_combine_cubes(cube_hi, cube_lo,
 
     Parameters
     ----------
-    cube_hi : SpectralCube
-    highresfitsfile : str
-        The high-resolution FITS file
-    cube_lo : SpectralCube
+    cube_hi : SpectralCube or str
+        The high-resolution spectral-cube or name of FITS file.
+    cube_lo : SpectralCube or str
+        The low-resolution spectral-cube or name of FITS file.
     highresscalefactor : float
         A factor to multiply the high-resolution data by to match the
         low- or high-resolution data
