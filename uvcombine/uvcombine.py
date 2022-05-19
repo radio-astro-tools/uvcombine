@@ -1,4 +1,5 @@
 
+from ast import Name
 from multiprocessing.sharedctypes import Value
 import radio_beam
 from reproject import reproject_interp
@@ -976,6 +977,7 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
 def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         allow_huge_operations=False,
+                        use_memmap=True,
                         **kwargs):
     """
     Parameters
@@ -1019,7 +1021,12 @@ def feather_simple_cube(cube_hi, cube_lo,
             raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
                              "spectrally match the low resolution to high resolution data.")
 
-    feath_array = np.empty(cube_hi.shape)
+    if use_memmap:
+        from tempfile import NamedTemporaryFile
+        fname = NamedTemporaryFile()
+        feath_array = np.memmap(fname, shape=cube_hi.shape, dtype=float, mode='w+')
+    else:
+        feath_array = np.empty(cube_hi.shape)
 
     pb = ProgressBar(cube_hi.shape[0])
     for ii in range(cube_hi.shape[0]):
@@ -1030,6 +1037,9 @@ def feather_simple_cube(cube_hi, cube_lo,
         feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
 
         pb.update()
+
+        if use_memmap:
+            feath_array.flush()
 
     feathcube = SpectralCube(data=feath_array,
                              header=cube_hi.header,
