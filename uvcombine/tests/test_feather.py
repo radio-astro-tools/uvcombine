@@ -6,7 +6,11 @@ import numpy.testing as npt
 import numpy as np
 from spectral_cube import Projection, SpectralCube
 
-from ..uvcombine import feather_simple, fourier_combine_cubes
+# Use sklearn to bring in metrics of image similarity
+from skimage.metrics import structural_similarity, normalized_root_mse
+
+from ..uvcombine import (feather_simple, fourier_combine_cubes,
+                         feather_simple_cube)
 
 
 def test_feather_simple(plaw_test_data):
@@ -23,6 +27,57 @@ def test_feather_simple(plaw_test_data):
 
     combo = feather_simple(highres_proj, lowres_proj)
 
+    # Assert the combined data is sufficiently close to the original
+    orig_data = orig_hdu.data
+
+    # This won't work on a pixel basis as we can't exclude outliers
+    # npt.assert_allclose(orig_data, combo.real)
+
+    # Test against flux recovery
+    frac_diff = (orig_data - combo.real).sum() / orig_data.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    # Test against normalized_root_mse using the Euclidean metric
+    # Roughly a fractional difference using the feathered data as source of "error"
+    nmse = normalized_root_mse(orig_data, combo.real, normalization='euclidean')
+    assert nmse < 3e-2
+
+    # Test against structural similarity metric
+    ssim = structural_similarity(orig_data, combo.real)
+    assert ssim > 0.99
+
+
+@pytest.mark.parametrize(('lounit', 'hiunit'),
+                         ((u.K, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.K),
+                          (u.MJy / u.sr, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.MJy / u.sr),
+                          (u.MJy / u.sr, u.K),
+                          (u.K, u.MJy / u.sr),
+                          (u.Jy / u.pixel, u.MJy / u.sr),
+                          (u.MJy / u.sr, u.Jy / u.pixel),
+                          (u.Jy / u.pixel, u.Jy / u.beam),
+                          (u.Jy / u.beam, u.Jy / u.pixel),
+                          (u.Jy / u.pixel, u.K),
+                          (u.K, u.Jy / u.pixel)))
+def test_feather_simple_varyunits(plaw_test_data, lounit, hiunit):
+
+    orig_hdu, lowres_hdu, highres_hdu = plaw_test_data
+
+    orig_proj = Projection.from_hdu(orig_hdu)
+
+    # Projection input
+    lowres_proj = Projection.from_hdu(lowres_hdu).to(lounit)
+    highres_proj = Projection.from_hdu(highres_hdu).to(hiunit)
+
+    combo = feather_simple(highres_proj, lowres_proj, return_hdu=True)
+
+    combo_proj = Projection.from_hdu(combo).to(orig_proj.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_proj - combo_proj).sum() / orig_proj.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
 
 def test_feather_simple_mismatchunit(plaw_test_data):
 
@@ -35,7 +90,7 @@ def test_feather_simple_mismatchunit(plaw_test_data):
         combo = feather_simple(highres_hdu, lowres_hdu, match_units=False)
 
 
-def test_feather_simple_cube(plaw_test_cube_sc):
+def test_fourier_combine_cubes(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
@@ -47,8 +102,12 @@ def test_feather_simple_cube(plaw_test_cube_sc):
 
     assert combo_cube_sc.unit == interf_cube.unit
 
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
 
-def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+
+def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
@@ -62,3 +121,83 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
 
     # Output units should in the units of the interferometer cube
     assert combo_cube_sc.unit == interf_cube.unit
+
+    combo_cube_sc_smunits = combo_cube_sc.to(orig_cube.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc_smunits).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+
+def test_feather_simple_cube(plaw_test_cube_sc):
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    # Test against normalized_root_mse using the Euclidean metric
+    # Roughly a fractional difference using the feathered data as source of "error"
+    nmse = normalized_root_mse(orig_cube.unitless_filled_data[:],
+                               combo_cube_sc.unitless_filled_data[:],
+                               normalization='euclidean')
+    assert nmse < 3e-2
+
+    # Test against structural similarity metric
+    # Compare channel vs. channel
+    for ii in range(orig_cube.shape[0]):
+        ssim = structural_similarity(orig_cube.unitless_filled_data[ii],
+                                    combo_cube_sc.unitless_filled_data[ii],
+                                    )
+        assert ssim > 0.99
+
+
+def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    interf_cube = interf_cube.to(u.Jy / u.beam)
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    # Output units should in the units of the interferometer cube
+    assert combo_cube_sc.unit == interf_cube.unit
+
+    combo_cube_sc_smunits = combo_cube_sc.to(orig_cube.unit)
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc_smunits).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+
+def test_feather_cube_consistency(plaw_test_cube_sc):
+    '''
+    Before fourier_combine_cubes is fully deprecated, check consistency
+    with the output from feather_simple_cubes.
+    '''
+
+    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    combo_cube_fcc = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
+    combo_cube_fcc_sc = SpectralCube.read(combo_cube_fcc)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+
+    diff_cube = (combo_cube_sc - combo_cube_fcc_sc) / combo_cube_sc
+
+    assert diff_cube.max().value < 1e-10
+    assert np.abs(diff_cube.min().value) < 1e-10
+

@@ -56,7 +56,7 @@ def plaw_test_data():
                                 largest_scale=56. * units.arcsec,
                                 smallest_scale=3. * units.arcsec,
                                 lowresfwhm=25. * units.arcsec,
-                                pixel_scale=1 * units.arcsec,
+                                pixel_scale=3 * units.arcsec,
                                 imsize=512)
 
     # angscales, ratios, lowres_pts, highres_pts = out
@@ -71,7 +71,7 @@ def plaw_test_cube_sc():
                              largest_scale=56. * units.arcsec,
                              smallest_scale=3. * units.arcsec,
                              lowresfwhm=25. * units.arcsec,
-                             pixel_scale=1 * units.arcsec,
+                             pixel_scale=3 * units.arcsec,
                              imsize=512,
                              nchan=3)
 
@@ -86,7 +86,7 @@ def plaw_test_cube_hdu():
                              largest_scale=56. * units.arcsec,
                              smallest_scale=3. * units.arcsec,
                              lowresfwhm=25. * units.arcsec,
-                             pixel_scale=1 * units.arcsec,
+                             pixel_scale=3 * units.arcsec,
                              imsize=512,
                              nchan=3)
 

@@ -1,4 +1,5 @@
 
+from multiprocessing.sharedctypes import Value
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -14,7 +15,7 @@ from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
 
 
-@deprecated("2021")
+@deprecated("2022")
 def file_in(filename, extnum=0):
     """
     Take the input files. If input is already HDU, then return it.
@@ -65,7 +66,7 @@ def file_in(filename, extnum=0):
 # NOTE: this SHOULD work for all 2D images in brightness units.
 # Hybrid integrated moment maps will not (and I don't think that's a realistic use
 # case).
-@deprecated("2021", message='Use Projection.to for unit conversion.')
+@deprecated("2022", message='Use Projection.to for unit conversion.')
 def match_flux_units(image, image_header, target_header):
     """
     Match the flux units of the input image to the target header.  There are
@@ -168,7 +169,7 @@ def match_flux_units(image, image_header, target_header):
 
     return image, image_header
 
-@deprecated("2021", message="Use Projection.reproject (2D).")
+@deprecated("2022", message="Use Projection.reproject (2D).")
 def regrid(hd1, im1, im2raw, hd2):
     """
     Regrid the low resolution image to have the same dimension and pixel size with the
@@ -411,7 +412,6 @@ def simple_fourier_unsharpmask(hdu, lowresfwhm, minval=1e-1):
     umask_hi = np.fft.ifft2(umaskfft_hi)
 
     return umask_hi
-
 
 def feather_simple(hires, lores,
                    highresextnum=0,
@@ -847,7 +847,7 @@ def feather_plot(hires, lores,
            }
 
 
-@deprecated("2021", message="Instead use SpectralCube.spectral_interpolate")
+@deprecated("2022", message="Instead use SpectralCube.spectral_interpolate")
 def spectral_regrid(cube, outgrid):
     """
     Spectrally regrid a cube onto a new spectral output grid
@@ -916,7 +916,7 @@ def spectral_regrid(cube, outgrid):
     return fits.PrimaryHDU(data=newcube, header=newheader)
 
 
-@deprecated("2021", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
+@deprecated("2022", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
 def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
     Smooth the cube along the spectral axis by a specific Gaussian kernel, then
@@ -973,9 +973,77 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
+def feather_simple_cube(cube_hi, cube_lo,
+                        allow_spectral_resample=True,
+                        allow_huge_operations=False,
+                        **kwargs):
+    """
+    Parameters
+    ----------
+    cube_hi : '~spectral_cube.SpectralCube' or str
+        The high-resolution spectral-cube or name of FITS file.
+    cube_lo : '~spectral_cube.SpectralCube' or str
+        The low-resolution spectral-cube or name of FITS file.
+    allow_spectral_resample : bool
+        If True, will run `~SpectralCube.spectral_interpolate` to match the spectral axes
+        of the data. Note that spectral smoothing may need to be first applied when downsampling
+        along the spectral axis; this should be applied to the input data prior to feathering.
+        If False, a ValueError is raised when the spectral axes of the cubes differ.
+    allow_huge_operations : bool
+        Sets `~spectral_cube.SpectralCube.allow_huge_operations`. If True, no memory related
+        errors will be raise prior to computing. If False, an error will be raise if the cube
+        size is too large (currently set to ~1 GB in spectral-cube).
+    kwargs : Passed to `~feather_simple`.
+
+    Returns
+    -------
+    feathcube : '~spectral_cube.SpectralCube'
+        The combined feathered spectral cube.
+
+    """
+
+    # TODO: Can we paralellize, daskify, or otherwise not-in-memory-ify this?
+
+    if not hasattr(cube_hi, 'shape'):
+        cube_hi = SpectralCube.read(cube_hi)
+    if not hasattr(cube_lo, 'shape'):
+        cube_lo = SpectralCube.read(cube_lo)
+
+    cube_hi.allow_huge_operations = allow_huge_operations
+    cube_lo.allow_huge_operations = allow_huge_operations
+
+    if cube_lo.shape[0]!=cube_hi.shape[0] or not all(cube_lo.spectral_axis == cube_hi.spectral_axis):
+        if allow_spectral_resample:
+            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis)
+        else:
+            raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
+                             "spectrally match the low resolution to high resolution data.")
+
+    feath_array = np.empty(cube_hi.shape)
+
+    pb = ProgressBar(cube_hi.shape[0])
+    for ii in range(cube_hi.shape[0]):
+
+        hslc = cube_hi[ii]
+        lslc = cube_lo[ii]
+
+        feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
+
+        pb.update()
+
+    feathcube = SpectralCube(data=feath_array,
+                             header=cube_hi.header,
+                             wcs=cube_hi.wcs,
+                             meta=cube_hi.meta)
+
+    return feathcube
+
+
+@deprecated("2022", message="Use feather_simple_cube.")
 def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
-                          lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
+                          lowresscalefactor=1.0,
+                          lowresfwhm=None,
                           return_regridded_cube_lo=False,
                           return_hdu=True,
                           maximum_cube_size=1e8,
@@ -985,10 +1053,10 @@ def fourier_combine_cubes(cube_hi, cube_lo,
 
     Parameters
     ----------
-    cube_hi : SpectralCube
-    highresfitsfile : str
-        The high-resolution FITS file
-    cube_lo : SpectralCube
+    cube_hi : SpectralCube or str
+        The high-resolution spectral-cube or name of FITS file.
+    cube_lo : SpectralCube or str
+        The low-resolution spectral-cube or name of FITS file.
     highresscalefactor : float
         A factor to multiply the high-resolution data by to match the
         low- or high-resolution data
@@ -1015,6 +1083,11 @@ def fourier_combine_cubes(cube_hi, cube_lo,
         raise ValueError("Cube is probably too large "
                          "for this operation to work in memory")
 
+    if lowresfwhm is None:
+        beam_low = cube_lo.beam
+        lowresfwhm = beam_low.major
+
+
     im_hi = cube_hi._data # want the raw data for this
     hd_hi = cube_hi.header
     assert hd_hi['NAXIS'] == im_hi.ndim == 3
@@ -1027,6 +1100,11 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
 
     cube_lo = cube_lo.to(cube_hi.unit)
+    # When in a per-beam unit, we need to scale the low res to the
+    # Jy / beam for the HIRES beam.
+    jybm_unit = u.Jy / u.beam
+    if cube_hi.unit.is_equivalent(jybm_unit):
+        cube_lo *= (cube_hi.beam.sr / cube_lo.beam.sr).decompose().value
 
     assert cube_hi.unit == cube_lo.unit, 'Cubes must have same or equivalent unit'
     assert cube_hi.unit.is_equivalent(u.Jy/u.beam) or cube_hi.unit.is_equivalent(u.K), "Cubes must have brightness units."
@@ -1066,6 +1144,7 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     elif return_hdu:
         output_header = wcs_hi.to_header()
         output_header['BUNIT'] = cube_hi.unit.to_string()
+        output_header.update(cube_hi.beam.to_header_keywords())
         return fits.PrimaryHDU(data=outcube, header=output_header)
     else:
         return outcube
