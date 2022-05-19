@@ -129,11 +129,12 @@ def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_simple_cube(plaw_test_cube_sc):
+def test_feather_simple_cube(plaw_test_cube_sc, use_memmap):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -159,13 +160,14 @@ def test_feather_simple_cube(plaw_test_cube_sc):
         assert ssim > 0.99
 
 
-def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+def test_feather_simple_cube_diffunits(plaw_test_cube_sc, use_memmap):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
     interf_cube = interf_cube.to(u.Jy / u.beam)
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -179,7 +181,7 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_cube_consistency(plaw_test_cube_sc):
+def test_feather_cube_consistency(plaw_test_cube_sc, use_memmap):
     '''
     Before fourier_combine_cubes is fully deprecated, check consistency
     with the output from feather_simple_cubes.
@@ -187,7 +189,8 @@ def test_feather_cube_consistency(plaw_test_cube_sc):
 
     orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap)
 
     combo_cube_fcc = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
     combo_cube_fcc_sc = SpectralCube.read(combo_cube_fcc)
