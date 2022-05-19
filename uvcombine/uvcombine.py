@@ -15,7 +15,7 @@ from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
 
 
-@deprecated("2021")
+@deprecated("2022")
 def file_in(filename, extnum=0):
     """
     Take the input files. If input is already HDU, then return it.
@@ -66,7 +66,7 @@ def file_in(filename, extnum=0):
 # NOTE: this SHOULD work for all 2D images in brightness units.
 # Hybrid integrated moment maps will not (and I don't think that's a realistic use
 # case).
-@deprecated("2021", message='Use Projection.to for unit conversion.')
+@deprecated("2022", message='Use Projection.to for unit conversion.')
 def match_flux_units(image, image_header, target_header):
     """
     Match the flux units of the input image to the target header.  There are
@@ -169,7 +169,7 @@ def match_flux_units(image, image_header, target_header):
 
     return image, image_header
 
-@deprecated("2021", message="Use Projection.reproject (2D).")
+@deprecated("2022", message="Use Projection.reproject (2D).")
 def regrid(hd1, im1, im2raw, hd2):
     """
     Regrid the low resolution image to have the same dimension and pixel size with the
@@ -847,7 +847,7 @@ def feather_plot(hires, lores,
            }
 
 
-@deprecated("2021", message="Instead use SpectralCube.spectral_interpolate")
+@deprecated("2022", message="Instead use SpectralCube.spectral_interpolate")
 def spectral_regrid(cube, outgrid):
     """
     Spectrally regrid a cube onto a new spectral output grid
@@ -916,7 +916,7 @@ def spectral_regrid(cube, outgrid):
     return fits.PrimaryHDU(data=newcube, header=newheader)
 
 
-@deprecated("2021", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
+@deprecated("2022", message="Use SpectralCube.spectral_smooth and SpectralCube.downsample_axis instead")
 def spectral_smooth_and_downsample(cube, kernelfwhm):
     """
     Smooth the cube along the spectral axis by a specific Gaussian kernel, then
@@ -1014,7 +1014,7 @@ def feather_simple_cube(hires, lores,
     return newcube
 
 
-@deprecated("2021", message="Use feather_simple_cube.")
+@deprecated("2022", message="Use feather_simple_cube.")
 def fourier_combine_cubes(cube_hi, cube_lo,
                           highresscalefactor=1.0,
                           lowresscalefactor=1.0, lowresfwhm=1*u.arcmin,
