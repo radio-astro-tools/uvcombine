@@ -1,6 +1,7 @@
 
 from ast import Name
 from multiprocessing.sharedctypes import Value
+from cv2 import add
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -14,6 +15,7 @@ from astropy import wcs
 from astropy import stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
+from spectral_cube.dask_spectral_cube import DaskSpectralCube
 
 
 @deprecated("2022")
@@ -974,6 +976,69 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
+try:
+    import dask
+    HAS_DASK = True
+except ImportError:
+    HAS_DASK = False
+
+if HAS_DASK:
+    import dask.array as da
+    from spectral_cube.dask_spectral_cube import add_save_to_tmp_dir_option
+
+    @add_save_to_tmp_dir_option
+    def _dask_feather_cubes(cube_hi, cube_lo, force_spatial_rechunk=True):
+
+        # TODO check on spectral cube type
+
+        # TODO check on same spectral axis
+
+        lowresfwhm = cube_lo.beam.major
+
+        wcs_hi_spat = cube_hi.wcs.celestial
+        wcs_lo_spat = cube_lo.wcs.celestial
+
+        pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
+        nax2, nax1 = cube_hi.shape[1:]
+
+        highresscalefactor = 1.0
+        lowresscalefactor = 1.0
+        weights = 1.0
+
+        replace_hires = False
+        lowpassfilterSD = False
+        deconvSD = False
+
+        # Do we need this wrapper here?
+        def feather_wrapper(img_hi, img_lo, **kwargs):
+
+            kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
+
+            fftsum, combo = fftmerge(kfft, ikfft,
+                                    img_hi * highresscalefactor * weights,
+                                    img_lo * lowresscalefactor * weights,
+                                    replace_hires=replace_hires,
+                                    lowpassfilterSD=lowpassfilterSD,
+                                    deconvSD=deconvSD,
+                                    )
+
+            return combo.real
+
+        # TODO: the block mapping has to be the same, too.
+        # so this will require that the cubes are already projected onto the same grid, too.
+        if force_spatial_rechunk:
+            cube_hi = cube_hi.rechunk(('auto', -1, -1))
+            cube_lo = cube_lo.rechunk(('auto', -1, -1))
+
+        data_lo = cube_lo._get_filled_data(fill=np.nan)
+
+        feath_cube = cube_hi._map_blocks_to_cube(feather_wrapper, additional_arrays=[data_lo])
+
+        return feath_cube
+
+
+
+
 def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         allow_huge_operations=False,
@@ -1027,6 +1092,11 @@ def feather_simple_cube(cube_hi, cube_lo,
         feath_array = np.memmap(fname, shape=cube_hi.shape, dtype=float, mode='w+')
     else:
         feath_array = np.empty(cube_hi.shape)
+
+    # todo: both cubes need to be dscs
+    if isinstance(cube_hi, DaskSpectralCube):
+
+        return _dask_feather_cubes(cube_hi, cube_lo)
 
     pb = ProgressBar(cube_hi.shape[0])
     for ii in range(cube_hi.shape[0]):

@@ -1,16 +1,40 @@
 import pytest
+import os
 
 import astropy.units as u
 from astropy.io import fits
 import numpy.testing as npt
 import numpy as np
-from spectral_cube import Projection, SpectralCube
+from spectral_cube import Projection, SpectralCube, DaskSpectralCube
 
 # Use sklearn to bring in metrics of image similarity
 from skimage.metrics import structural_similarity, normalized_root_mse
 
+from . import path
+
 from ..uvcombine import (feather_simple, fourier_combine_cubes,
                          feather_simple_cube)
+
+
+def cube_and_raw(filename, use_dask=None):
+    if use_dask is None:
+        raise ValueError('use_dask should be explicitly set')
+    p = path(filename)
+    if os.path.splitext(p)[-1] == '.fits':
+        with fits.open(p) as hdulist:
+            d = hdulist[0].data
+        c = SpectralCube.read(p, format='fits', mode='readonly', use_dask=use_dask)
+    elif os.path.splitext(p)[-1] == '.image':
+        ia.open(p)
+        d = ia.getchunk()
+        ia.unlock()
+        ia.close()
+        ia.done()
+        c = SpectralCube.read(p, format='casa_image', use_dask=use_dask)
+    else:
+        raise ValueError("Unsupported filetype")
+
+    return c, d
 
 
 def test_feather_simple(plaw_test_data):
@@ -135,6 +159,42 @@ def test_feather_simple_cube(plaw_test_cube_sc, use_memmap):
 
     combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
                                         use_memmap=use_memmap)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    # Test against normalized_root_mse using the Euclidean metric
+    # Roughly a fractional difference using the feathered data as source of "error"
+    nmse = normalized_root_mse(orig_cube.unitless_filled_data[:],
+                               combo_cube_sc.unitless_filled_data[:],
+                               normalization='euclidean')
+    assert nmse < 3e-2
+
+    # Test against structural similarity metric
+    # Compare channel vs. channel
+    for ii in range(orig_cube.shape[0]):
+        ssim = structural_similarity(orig_cube.unitless_filled_data[ii],
+                                    combo_cube_sc.unitless_filled_data[ii],
+                                    )
+        assert ssim > 0.99
+
+
+def test_feather_simple_cube_dask(cube_data, use_dask=True):
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    print(orig_fname)
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
 
     assert orig_cube.shape == combo_cube_sc.shape
 

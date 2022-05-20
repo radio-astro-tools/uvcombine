@@ -64,6 +64,36 @@ def plaw_test_data():
 
     return orig_hdu, lowres_hdu, highres_hdu
 
+def prepare_cube_data():
+    out = generate_test_cube(return_hdu=True,
+                             powerlawindex=1.5,
+                             largest_scale=56. * units.arcsec,
+                             smallest_scale=3. * units.arcsec,
+                             lowresfwhm=25. * units.arcsec,
+                             pixel_scale=3 * units.arcsec,
+                             imsize=512,
+                             nchan=3)
+
+    orig_hdu, sd_hdu, interf_hdu = out
+
+    return orig_hdu, sd_hdu, interf_hdu
+
+@pytest.fixture
+def cube_data(tmp_path):
+
+    orig_hdu, sd_hdu, interf_hdu = prepare_cube_data()
+
+    orig_fname = tmp_path / "orig_cube.fits"
+    sd_fname = tmp_path / "sd_cube.fits"
+    interf_fname = tmp_path / "interf_cube.fits"
+
+    orig_hdu.writeto(orig_fname)
+    sd_hdu.writeto(sd_fname)
+    interf_hdu.writeto(interf_fname)
+
+    return orig_fname, sd_fname, interf_fname
+
+
 @pytest.fixture
 def plaw_test_cube_sc():
     out = generate_test_cube(return_hdu=False,
