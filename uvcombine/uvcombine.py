@@ -1,7 +1,4 @@
 
-from ast import Name
-from multiprocessing.sharedctypes import Value
-from cv2 import add
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
