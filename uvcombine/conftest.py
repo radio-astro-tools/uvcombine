@@ -95,37 +95,6 @@ def cube_data(tmp_path):
 
 
 @pytest.fixture
-def plaw_test_cube_sc():
-    out = generate_test_cube(return_hdu=False,
-                             powerlawindex=1.5,
-                             largest_scale=56. * units.arcsec,
-                             smallest_scale=3. * units.arcsec,
-                             lowresfwhm=25. * units.arcsec,
-                             pixel_scale=3 * units.arcsec,
-                             imsize=512,
-                             nchan=3)
-
-    orig_cube, sd_cube, interf_cube = out
-
-    return orig_cube, sd_cube, interf_cube
-
-@pytest.fixture
-def plaw_test_cube_hdu():
-    out = generate_test_cube(return_hdu=True,
-                             powerlawindex=1.5,
-                             largest_scale=56. * units.arcsec,
-                             smallest_scale=3. * units.arcsec,
-                             lowresfwhm=25. * units.arcsec,
-                             pixel_scale=3 * units.arcsec,
-                             imsize=512,
-                             nchan=3)
-
-    orig_hdu, sd_hdu, interf_hdu = out
-
-    return orig_hdu, sd_hdu, interf_hdu
-
-
-@pytest.fixture
 def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
 
     pixel_scale = 1 * units.arcsec
@@ -181,6 +150,12 @@ def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
 
 @pytest.fixture(params=[False, True])
 def use_memmap(request):
+    # Fixture to run tests that use this fixture with and without memmap for
+    # feathering cubes
+    return request.param
+
+@pytest.fixture(params=[False, True])
+def use_dask(request):
     # Fixture to run tests that use this fixture with and without memmap for
     # feathering cubes
     return request.param
