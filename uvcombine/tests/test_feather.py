@@ -114,9 +114,13 @@ def test_feather_simple_mismatchunit(plaw_test_data):
         combo = feather_simple(highres_hdu, lowres_hdu, match_units=False)
 
 
-def test_fourier_combine_cubes(plaw_test_cube_sc):
+def test_fourier_combine_cubes(cube_data):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
 
     combo_cube = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
 
@@ -131,9 +135,13 @@ def test_fourier_combine_cubes(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
+def test_fourier_combine_cubes_diffunits(cube_data):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
 
     interf_cube = interf_cube.to(u.Jy / u.beam)
 
@@ -153,12 +161,17 @@ def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_simple_cube(plaw_test_cube_sc, use_memmap):
+def test_feather_simple_cube(cube_data, use_dask, use_memmap):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
 
     combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
-                                        use_memmap=use_memmap)
+                                        use_memmap=use_memmap,
+                                        use_dask=use_dask)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -187,8 +200,6 @@ def test_feather_simple_cube(plaw_test_cube_sc, use_memmap):
 def test_feather_simple_cube_dask(cube_data, use_dask=True):
 
     orig_fname, sd_fname, interf_fname = cube_data
-
-    print(orig_fname)
 
     orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
     sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
@@ -220,14 +231,19 @@ def test_feather_simple_cube_dask(cube_data, use_dask=True):
         assert ssim > 0.99
 
 
-def test_feather_simple_cube_diffunits(plaw_test_cube_sc, use_memmap):
+def test_feather_simple_cube_diffunits(cube_data, use_dask, use_memmap):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
 
     interf_cube = interf_cube.to(u.Jy / u.beam)
 
     combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
-                                        use_memmap=use_memmap)
+                                        use_memmap=use_memmap,
+                                        use_dask=use_dask)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -241,13 +257,17 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc, use_memmap):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_cube_consistency(plaw_test_cube_sc, use_memmap):
+def test_feather_cube_consistency(cube_data, use_memmap):
     '''
     Before fourier_combine_cubes is fully deprecated, check consistency
     with the output from feather_simple_cubes.
     '''
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
 
     combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
                                         use_memmap=use_memmap)
