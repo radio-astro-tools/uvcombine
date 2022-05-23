@@ -44,9 +44,7 @@ expensive, the spectral-cube dask integration exposes an option to save temporar
 intermediate products as zarr files. This is especially useful when rechunking the
 data to optimize different computations (e.g., spectral versus spatial regridding.)
 To enable this mode, `use_save_to_tmp_dir <https://spectral-cube.readthedocs.io/en/latest/dask.html#saving-intermediate-results-to-disk>`_
-can be enabled in `~uvcombine.feather_simple_cube`.
-This will additionally trigger saving the feathered cube to a temporary zarr file and
-avoids delaying the feathering computation::
+can be enabled in `~uvcombine.feather_simple_cube`::
 
     >>> feathered_cube = feather_simple_cube(highres_cube, lowres_cube, use_save_to_tmp_dir=True)  # doctest: +SKIP
 
