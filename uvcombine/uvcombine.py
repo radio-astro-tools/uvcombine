@@ -984,20 +984,18 @@ if HAS_DASK:
     from spectral_cube.dask_spectral_cube import add_save_to_tmp_dir_option
 
     @add_save_to_tmp_dir_option
-    def _dask_feather_cubes(cube_hi, cube_lo):
+    def _dask_feather_cubes(cube_hi, cube_lo,
+                            highresscalefactor=1.0,
+                            lowresscalefactor=1.0,
+                            weights=1.0,
+                            replace_hires=False,
+                            lowpassfilterSD=False,
+                            deconvSD=False):
 
         lowresfwhm = cube_lo.beam.major
 
         pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
         nax2, nax1 = cube_hi.shape[1:]
-
-        highresscalefactor = 1.0
-        lowresscalefactor = 1.0
-        weights = 1.0
-
-        replace_hires = False
-        lowpassfilterSD = False
-        deconvSD = False
 
         # Do we need this wrapper here?
         def feather_wrapper(img_hi, img_lo, **kwargs):
@@ -1028,7 +1026,7 @@ def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         allow_huge_operations=False,
                         use_memmap=True,
-                        use_dask_on_read=False,
+                        use_dask=False,
                         use_save_to_tmp_dir=False,
                         force_spatial_rechunk=True,
                         allow_lo_reproj=True,
@@ -1049,6 +1047,25 @@ def feather_simple_cube(cube_hi, cube_lo,
         Sets `~spectral_cube.SpectralCube.allow_huge_operations`. If True, no memory related
         errors will be raise prior to computing. If False, an error will be raise if the cube
         size is too large (currently set to ~1 GB in spectral-cube).
+    use_memmap : bool
+        Enable saving the feathered cube to a memory-mapped array to avoid
+        having the whole output cube in memory.
+    use_dask : bool
+        Enable feathering using dask operations. See the `spectral-cube documentation <https://spectral-cube.readthedocs.io/en/latest/dask.html>`_
+        for more information on using dask with spectral-cube.
+    use_save_to_tmp_dir : bool
+        With `use_dask` enabled, when `True` will save intermediate operations
+        to a temporary zarr file. This forces dask to perform each computation and
+        can be useful for operations that are optimized with different rechunking
+        schemes.
+    force_spatial_rechunk : bool
+        With `use_dask` enabled, `True` forces rechunking both cubes to
+        ensure the chunk sizes match and have contiguous spatial chunks
+        (i.e., chunk only along the spectral axis).
+    allow_lo_reproj : bool
+        With `use_dask` enabled, `cube_lo` will be reprojected to match
+        `cube_hi`. This step can otherwise be performed prior to feathering
+        but is needed to force alignment of the chunks in both cubes.
     kwargs : Passed to `~feather_simple`.
 
     Returns
@@ -1059,9 +1076,9 @@ def feather_simple_cube(cube_hi, cube_lo,
     """
 
     if not hasattr(cube_hi, 'shape'):
-        cube_hi = SpectralCube.read(cube_hi, use_dask=use_dask_on_read)
+        cube_hi = SpectralCube.read(cube_hi, use_dask=use_dask)
     if not hasattr(cube_lo, 'shape'):
-        cube_lo = SpectralCube.read(cube_lo, use_dask=use_dask_on_read)
+        cube_lo = SpectralCube.read(cube_lo, use_dask=use_dask)
 
     if isinstance(cube_lo, DaskSpectralCube):
         save_kwargs = {"save_to_tmp_dir": use_save_to_tmp_dir}
@@ -1106,9 +1123,9 @@ def feather_simple_cube(cube_hi, cube_lo,
                                  f" cube_lo: {cube_lo._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
 
-
         return _dask_feather_cubes(cube_hi, cube_lo,
-                                   save_to_tmp_dir=use_save_to_tmp_dir)
+                                   save_to_tmp_dir=use_save_to_tmp_dir,
+                                   **kwargs)
 
     else:
 
