@@ -1118,12 +1118,12 @@ def feather_simple_cube(cube_hi, cube_lo,
         # Ensure spatial chunk sizes are matched.
         if force_spatial_rechunk:
             cube_hi = cube_hi.rechunk(('auto', -1, -1), **save_kwargs)
-            cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
+            cube_lo_reproj = cube_lo_reproj.rechunk(('auto', -1, -1), **save_kwargs)
 
-            if cube_hi._data.chunksize != cube_lo._data.chunksize:
+            if cube_hi._data.chunksize != cube_lo_reproj._data.chunksize:
                 raise ValueError("The chunk size does not match between the cubes."
                                  f" cube_hi: {cube_hi._data.chunksize} "
-                                 f" cube_lo: {cube_lo._data.chunksize} "
+                                 f" cube_lo_reproj: {cube_lo_reproj._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
 
         # Check kwargs for feather_simple kwarg to allow matching units
@@ -1135,21 +1135,21 @@ def feather_simple_cube(cube_hi, cube_lo,
             # unit equivalent to that specified in the high-resolution header's units
 
             # NOTE: is this memory-friendly??
-            cube_lo = cube_lo.to(cube_hi.unit)
+            cube_lo_reproj = cube_lo_reproj.to(cube_hi.unit)
 
             # When in a per-beam unit, we need to scale the low res to the
             # Jy / beam for the HIRES beam.
             jybm_unit = u.Jy / u.beam
             if cube_hi.unit.is_equivalent(jybm_unit):
-                cube_lo *= (cube_hi.beam.sr / cube_lo.beam.sr).decompose().value
+                cube_lo_reproj *= (cube_hi.beam.sr / cube_lo_reproj.beam.sr).decompose().value
 
         # Add check that the units are compatible
-        equiv_units = cube_lo.unit.is_equivalent(cube_hi.unit)
+        equiv_units = cube_lo_reproj.unit.is_equivalent(cube_hi.unit)
         if not equiv_units:
             raise ValueError("Brightness units are not equivalent: "
-                            f"hires: {cube_hi.unit}; lowres: {cube_lo.unit}")
+                            f"hires: {cube_hi.unit}; lowres: {cube_lo_reproj.unit}")
 
-        feathcube = _dask_feather_cubes(cube_hi, cube_lo,
+        feathcube = _dask_feather_cubes(cube_hi, cube_lo_reproj,
                                         save_to_tmp_dir=use_save_to_tmp_dir,
                                         **kwargs)
 
