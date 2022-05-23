@@ -1101,6 +1101,8 @@ def feather_simple_cube(cube_hi, cube_lo,
         # The block mapping has to be the same. Set here whether to
         # allow a prior reproject operation for the SD to match.
         if allow_lo_reproj:
+            # NOTE: is this memory friendly? We don't have a dedicated
+            # dask reprojection task, so this COULD break things.
             cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
             cube_lo_reproj = cube_lo.reproject(cube_hi.header, use_memmap=use_memmap)
         else:
@@ -1132,6 +1134,7 @@ def feather_simple_cube(cube_hi, cube_lo,
             # After this step, the units of cube_hi are some sort of surface brightness
             # unit equivalent to that specified in the high-resolution header's units
 
+            # NOTE: is this memory-friendly??
             cube_lo = cube_lo.to(cube_hi.unit)
 
             # When in a per-beam unit, we need to scale the low res to the
