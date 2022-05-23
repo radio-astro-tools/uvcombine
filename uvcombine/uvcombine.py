@@ -1123,9 +1123,9 @@ def feather_simple_cube(cube_hi, cube_lo,
                                  f" cube_lo: {cube_lo._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
 
-        return _dask_feather_cubes(cube_hi, cube_lo,
-                                   save_to_tmp_dir=use_save_to_tmp_dir,
-                                   **kwargs)
+        feathcube = _dask_feather_cubes(cube_hi, cube_lo,
+                                        save_to_tmp_dir=use_save_to_tmp_dir,
+                                        **kwargs)
 
     else:
 
@@ -1154,7 +1154,7 @@ def feather_simple_cube(cube_hi, cube_lo,
                                 wcs=cube_hi.wcs,
                                 meta=cube_hi.meta)
 
-        return feathcube
+    return feathcube
 
 
 @deprecated("2022", message="Use feather_simple_cube.")
