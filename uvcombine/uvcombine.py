@@ -1113,6 +1113,7 @@ def feather_simple_cube(cube_hi, cube_lo,
                              " shape. Enable `allow_lo_reproj` or reproject cube_lo"
                              " before feathering.")
 
+        # Ensure spatial chunk sizes are matched.
         if force_spatial_rechunk:
             cube_hi = cube_hi.rechunk(('auto', -1, -1), **save_kwargs)
             cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
@@ -1123,13 +1124,13 @@ def feather_simple_cube(cube_hi, cube_lo,
                                  f" cube_lo: {cube_lo._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
 
-        match_units = kwargs.get('match_units', True)
+        # Check kwargs for feather_simple kwarg to allow matching units
+        match_units = kwargs.pop('match_units', True)
 
+        # Check for units consistency
         if match_units:
-            # After this step, the units of im_hi are some sort of surface brightness
+            # After this step, the units of cube_hi are some sort of surface brightness
             # unit equivalent to that specified in the high-resolution header's units
-            # Note that this step does NOT preserve the values of im_lowraw and
-            # header_lowraw from above
 
             cube_lo = cube_lo.to(cube_hi.unit)
 
