@@ -1123,6 +1123,28 @@ def feather_simple_cube(cube_hi, cube_lo,
                                  f" cube_lo: {cube_lo._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
 
+        match_units = kwargs.get('match_units', True)
+
+        if match_units:
+            # After this step, the units of im_hi are some sort of surface brightness
+            # unit equivalent to that specified in the high-resolution header's units
+            # Note that this step does NOT preserve the values of im_lowraw and
+            # header_lowraw from above
+
+            cube_lo = cube_lo.to(cube_hi.unit)
+
+            # When in a per-beam unit, we need to scale the low res to the
+            # Jy / beam for the HIRES beam.
+            jybm_unit = u.Jy / u.beam
+            if cube_hi.unit.is_equivalent(jybm_unit):
+                cube_lo *= (cube_hi.beam.sr / cube_lo.beam.sr).decompose().value
+
+        # Add check that the units are compatible
+        equiv_units = cube_lo.unit.is_equivalent(cube_hi.unit)
+        if not equiv_units:
+            raise ValueError("Brightness units are not equivalent: "
+                            f"hires: {cube_hi.unit}; lowres: {cube_lo.unit}")
+
         feathcube = _dask_feather_cubes(cube_hi, cube_lo,
                                         save_to_tmp_dir=use_save_to_tmp_dir,
                                         **kwargs)
