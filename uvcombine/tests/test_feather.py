@@ -197,38 +197,38 @@ def test_feather_simple_cube(cube_data, use_dask, use_memmap):
         assert ssim > 0.99
 
 
-def test_feather_simple_cube_dask(cube_data, use_dask=True):
+def test_feather_simple_cube_dask_consistency(cube_data):
 
     orig_fname, sd_fname, interf_fname = cube_data
 
-    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
-    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
-    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
+
+    orig_cube_dask = cube_and_raw(orig_fname, use_dask=True)[0]
+    sd_cube_dask = cube_and_raw(sd_fname, use_dask=True)[0]
+    interf_cube_dask = cube_and_raw(interf_fname, use_dask=True)[0]
 
     combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    combo_cube_sc_dask = feather_simple_cube(interf_cube_dask, sd_cube_dask)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
     assert combo_cube_sc.unit == interf_cube.unit
+    assert combo_cube_sc_dask.unit == interf_cube.unit
 
     # Test against flux recovery
     frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
-    # Test against normalized_root_mse using the Euclidean metric
-    # Roughly a fractional difference using the feathered data as source of "error"
-    nmse = normalized_root_mse(orig_cube.unitless_filled_data[:],
-                               combo_cube_sc.unitless_filled_data[:],
-                               normalization='euclidean')
-    assert nmse < 3e-2
+    frac_diff = (orig_cube - combo_cube_sc_dask).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
 
-    # Test against structural similarity metric
-    # Compare channel vs. channel
-    for ii in range(orig_cube.shape[0]):
-        ssim = structural_similarity(orig_cube.unitless_filled_data[ii],
-                                    combo_cube_sc.unitless_filled_data[ii],
-                                    )
-        assert ssim > 0.99
+    combo_cube_sc_data = combo_cube_sc.unitless_filled_data[:]
+    combo_cube_sc_dask_data = combo_cube_sc_dask.unitless_filled_data[:]
+
+    npt.assert_allclose(combo_cube_sc_data, combo_cube_sc_dask_data, atol=1e-5)
 
 
 def test_feather_simple_cube_diffunits(cube_data, use_dask, use_memmap):
