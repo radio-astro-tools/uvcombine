@@ -984,16 +984,9 @@ if HAS_DASK:
     from spectral_cube.dask_spectral_cube import add_save_to_tmp_dir_option
 
     @add_save_to_tmp_dir_option
-    def _dask_feather_cubes(cube_hi, cube_lo, force_spatial_rechunk=True):
-
-        # TODO check on spectral cube type
-
-        # TODO check on same spectral axis
+    def _dask_feather_cubes(cube_hi, cube_lo):
 
         lowresfwhm = cube_lo.beam.major
-
-        wcs_hi_spat = cube_hi.wcs.celestial
-        wcs_lo_spat = cube_lo.wcs.celestial
 
         pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
         nax2, nax1 = cube_hi.shape[1:]
@@ -1021,15 +1014,10 @@ if HAS_DASK:
 
             return combo.real
 
-        # TODO: the block mapping has to be the same, too.
-        # so this will require that the cubes are already projected onto the same grid, too.
-        if force_spatial_rechunk:
-            cube_hi = cube_hi.rechunk(('auto', -1, -1))
-            cube_lo = cube_lo.rechunk(('auto', -1, -1))
-
         data_lo = cube_lo._get_filled_data(fill=np.nan)
 
-        feath_cube = cube_hi._map_blocks_to_cube(feather_wrapper, additional_arrays=[data_lo])
+        feath_cube = cube_hi._map_blocks_to_cube(feather_wrapper,
+                                                 additional_arrays=[data_lo])
 
         return feath_cube
 
@@ -1040,6 +1028,10 @@ def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         allow_huge_operations=False,
                         use_memmap=True,
+                        use_dask_on_read=False,
+                        use_save_to_tmp_dir=False,
+                        force_spatial_rechunk=True,
+                        allow_lo_reproj=True,
                         **kwargs):
     """
     Parameters
@@ -1066,54 +1058,86 @@ def feather_simple_cube(cube_hi, cube_lo,
 
     """
 
-    # TODO: Can we paralellize, daskify, or otherwise not-in-memory-ify this?
-
     if not hasattr(cube_hi, 'shape'):
-        cube_hi = SpectralCube.read(cube_hi)
+        cube_hi = SpectralCube.read(cube_hi, use_dask=use_dask_on_read)
     if not hasattr(cube_lo, 'shape'):
-        cube_lo = SpectralCube.read(cube_lo)
+        cube_lo = SpectralCube.read(cube_lo, use_dask=use_dask_on_read)
+
+    if isinstance(cube_lo, DaskSpectralCube):
+        save_kwargs = {"save_to_tmp_dir": use_save_to_tmp_dir}
+    else:
+        save_kwargs = {}
 
     cube_hi.allow_huge_operations = allow_huge_operations
     cube_lo.allow_huge_operations = allow_huge_operations
 
     if cube_lo.shape[0]!=cube_hi.shape[0] or not all(cube_lo.spectral_axis == cube_hi.spectral_axis):
         if allow_spectral_resample:
-            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis)
+            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis, **save_kwargs)
         else:
             raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
                              "spectrally match the low resolution to high resolution data.")
 
-    if use_memmap:
-        from tempfile import NamedTemporaryFile
-        fname = NamedTemporaryFile()
-        feath_array = np.memmap(fname, shape=cube_hi.shape, dtype=float, mode='w+')
+    # If cubes are DaskSpectralCubes, use the dask implementation
+    if isinstance(cube_hi, DaskSpectralCube) and isinstance(cube_lo, DaskSpectralCube):
+
+        # The block mapping has to be the same. Set here whether to
+        # allow a prior reproject operation for the SD to match.
+        if allow_lo_reproj:
+            cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
+            cube_lo_reproj = cube_lo.reproject(cube_hi.header, use_memmap=use_memmap)
+        else:
+            cube_lo_reproj = cube_lo
+
+        # Check that the pixel sizes of both cubes now match
+        equal_sizes = cube_lo_reproj.shape == cube_hi.shape
+        if not equal_sizes:
+            raise ValueError("The cube_lo array shape does not match the cube_hi"
+                             " shape. Enable `allow_lo_reproj` or reproject cube_lo"
+                             " before feathering.")
+
+        if force_spatial_rechunk:
+            cube_hi = cube_hi.rechunk(('auto', -1, -1), **save_kwargs)
+            cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
+
+            if cube_hi._data.chunksize != cube_lo._data.chunksize:
+                raise ValueError("The chunk size does not match between the cubes."
+                                 f" cube_hi: {cube_hi._data.chunksize} "
+                                 f" cube_lo: {cube_lo._data.chunksize} "
+                                 "Check reprojection or apply prior to feathering.")
+
+
+        return _dask_feather_cubes(cube_hi, cube_lo,
+                                   save_to_tmp_dir=use_save_to_tmp_dir)
+
     else:
-        feath_array = np.empty(cube_hi.shape)
-
-    # todo: both cubes need to be dscs
-    if isinstance(cube_hi, DaskSpectralCube):
-
-        return _dask_feather_cubes(cube_hi, cube_lo)
-
-    pb = ProgressBar(cube_hi.shape[0])
-    for ii in range(cube_hi.shape[0]):
-
-        hslc = cube_hi[ii]
-        lslc = cube_lo[ii]
-
-        feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
-
-        pb.update()
 
         if use_memmap:
-            feath_array.flush()
+            from tempfile import NamedTemporaryFile
+            fname = NamedTemporaryFile()
+            feath_array = np.memmap(fname, shape=cube_hi.shape, dtype=float, mode='w+')
+        else:
+            feath_array = np.empty(cube_hi.shape)
 
-    feathcube = SpectralCube(data=feath_array,
-                             header=cube_hi.header,
-                             wcs=cube_hi.wcs,
-                             meta=cube_hi.meta)
+        pb = ProgressBar(cube_hi.shape[0])
+        for ii in range(cube_hi.shape[0]):
 
-    return feathcube
+            hslc = cube_hi[ii]
+            lslc = cube_lo[ii]
+
+            feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
+
+            pb.update()
+
+            if use_memmap:
+                feath_array.flush()
+
+        feathcube = SpectralCube(data=feath_array,
+                                header=cube_hi.header,
+                                wcs=cube_hi.wcs,
+                                meta=cube_hi.meta)
+
+        return feathcube
 
 
 @deprecated("2022", message="Use feather_simple_cube.")
