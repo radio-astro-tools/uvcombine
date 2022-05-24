@@ -12,7 +12,7 @@ from astropy import wcs
 from astropy import stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
-from spectral_cube.dask_spectral_cube import DaskSpectralCube
+from spectral_cube.dask_spectral_cube import DaskSpectralCube, DaskVaryingResolutionSpectralCube
 
 
 @deprecated("2022")
@@ -1090,6 +1090,12 @@ def feather_simple_cube(cube_hi, cube_lo,
         cube_hi = SpectralCube.read(cube_hi, use_dask=use_dask)
     if not hasattr(cube_lo, 'shape'):
         cube_lo = SpectralCube.read(cube_lo, use_dask=use_dask)
+
+    # TODO: add VRSC dask suppoert
+    # Cannot handle varying res with dask yet
+    if isinstance(cube_lo, DaskVaryingResolutionSpectralCube):
+        raise TypeError("`feather_simple_cube` cannot yet handle varying resolution spectral cubes"
+                        " (beam size per channel). Use a non-dask for now.")
 
     if isinstance(cube_lo, DaskSpectralCube):
         save_kwargs = {"save_to_tmp_dir": use_save_to_tmp_dir}
