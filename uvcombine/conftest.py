@@ -64,23 +64,7 @@ def plaw_test_data():
 
     return orig_hdu, lowres_hdu, highres_hdu
 
-@pytest.fixture
-def plaw_test_cube_sc():
-    out = generate_test_cube(return_hdu=False,
-                             powerlawindex=1.5,
-                             largest_scale=56. * units.arcsec,
-                             smallest_scale=3. * units.arcsec,
-                             lowresfwhm=25. * units.arcsec,
-                             pixel_scale=3 * units.arcsec,
-                             imsize=512,
-                             nchan=3)
-
-    orig_cube, sd_cube, interf_cube = out
-
-    return orig_cube, sd_cube, interf_cube
-
-@pytest.fixture
-def plaw_test_cube_hdu():
+def prepare_cube_data():
     out = generate_test_cube(return_hdu=True,
                              powerlawindex=1.5,
                              largest_scale=56. * units.arcsec,
@@ -93,6 +77,21 @@ def plaw_test_cube_hdu():
     orig_hdu, sd_hdu, interf_hdu = out
 
     return orig_hdu, sd_hdu, interf_hdu
+
+@pytest.fixture
+def cube_data(tmp_path):
+
+    orig_hdu, sd_hdu, interf_hdu = prepare_cube_data()
+
+    orig_fname = tmp_path / "orig_cube.fits"
+    sd_fname = tmp_path / "sd_cube.fits"
+    interf_fname = tmp_path / "interf_cube.fits"
+
+    orig_hdu.writeto(orig_fname)
+    sd_hdu.writeto(sd_fname)
+    interf_hdu.writeto(interf_fname)
+
+    return orig_fname, sd_fname, interf_fname
 
 
 @pytest.fixture
@@ -148,3 +147,15 @@ def image_sz512as_pl1p5_fwhm2as_scale1as(tmp_path):
     sd_proj.write(sd_fn, overwrite=True)
 
     return tmp_path, input_fn, intf_fn, sd_fn
+
+@pytest.fixture(params=[False, True])
+def use_memmap(request):
+    # Fixture to run tests that use this fixture with and without memmap for
+    # feathering cubes
+    return request.param
+
+@pytest.fixture(params=[False, True])
+def use_dask(request):
+    # Fixture to run tests that use this fixture with and without memmap for
+    # feathering cubes
+    return request.param

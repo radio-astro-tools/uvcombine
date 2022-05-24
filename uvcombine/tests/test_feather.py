@@ -1,16 +1,40 @@
 import pytest
+import os
 
 import astropy.units as u
 from astropy.io import fits
 import numpy.testing as npt
 import numpy as np
-from spectral_cube import Projection, SpectralCube
+from spectral_cube import Projection, SpectralCube, DaskSpectralCube
 
 # Use sklearn to bring in metrics of image similarity
 from skimage.metrics import structural_similarity, normalized_root_mse
 
+from . import path
+
 from ..uvcombine import (feather_simple, fourier_combine_cubes,
                          feather_simple_cube)
+
+
+def cube_and_raw(filename, use_dask=None):
+    if use_dask is None:
+        raise ValueError('use_dask should be explicitly set')
+    p = path(filename)
+    if os.path.splitext(p)[-1] == '.fits':
+        with fits.open(p) as hdulist:
+            d = hdulist[0].data
+        c = SpectralCube.read(p, format='fits', mode='readonly', use_dask=use_dask)
+    elif os.path.splitext(p)[-1] == '.image':
+        ia.open(p)
+        d = ia.getchunk()
+        ia.unlock()
+        ia.close()
+        ia.done()
+        c = SpectralCube.read(p, format='casa_image', use_dask=use_dask)
+    else:
+        raise ValueError("Unsupported filetype")
+
+    return c, d
 
 
 def test_feather_simple(plaw_test_data):
@@ -90,9 +114,13 @@ def test_feather_simple_mismatchunit(plaw_test_data):
         combo = feather_simple(highres_hdu, lowres_hdu, match_units=False)
 
 
-def test_fourier_combine_cubes(plaw_test_cube_sc):
+def test_fourier_combine_cubes(cube_data):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
 
     combo_cube = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
 
@@ -107,9 +135,13 @@ def test_fourier_combine_cubes(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
+def test_fourier_combine_cubes_diffunits(cube_data):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
 
     interf_cube = interf_cube.to(u.Jy / u.beam)
 
@@ -129,11 +161,17 @@ def test_fourier_combine_cubes_diffunits(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_simple_cube(plaw_test_cube_sc):
+def test_feather_simple_cube(cube_data, use_dask, use_memmap):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap,
+                                        use_dask=use_dask)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -159,13 +197,53 @@ def test_feather_simple_cube(plaw_test_cube_sc):
         assert ssim > 0.99
 
 
-def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
+def test_feather_simple_cube_dask_consistency(cube_data):
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
+
+    orig_cube_dask = cube_and_raw(orig_fname, use_dask=True)[0]
+    sd_cube_dask = cube_and_raw(sd_fname, use_dask=True)[0]
+    interf_cube_dask = cube_and_raw(interf_fname, use_dask=True)[0]
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+
+    combo_cube_sc_dask = feather_simple_cube(interf_cube_dask, sd_cube_dask)
+
+    assert orig_cube.shape == combo_cube_sc.shape
+
+    assert combo_cube_sc.unit == interf_cube.unit
+    assert combo_cube_sc_dask.unit == interf_cube.unit
+
+    # Test against flux recovery
+    frac_diff = (orig_cube - combo_cube_sc).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    frac_diff = (orig_cube - combo_cube_sc_dask).sum() / orig_cube.sum()
+    npt.assert_allclose(0., frac_diff, atol=5e-3)
+
+    combo_cube_sc_data = combo_cube_sc.unitless_filled_data[:]
+    combo_cube_sc_dask_data = combo_cube_sc_dask.unitless_filled_data[:]
+
+    npt.assert_allclose(combo_cube_sc_data, combo_cube_sc_dask_data, atol=1e-5)
+
+
+def test_feather_simple_cube_diffunits(cube_data, use_dask, use_memmap):
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
 
     interf_cube = interf_cube.to(u.Jy / u.beam)
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap,
+                                        use_dask=use_dask)
 
     assert orig_cube.shape == combo_cube_sc.shape
 
@@ -179,15 +257,20 @@ def test_feather_simple_cube_diffunits(plaw_test_cube_sc):
     npt.assert_allclose(0., frac_diff, atol=5e-3)
 
 
-def test_feather_cube_consistency(plaw_test_cube_sc):
+def test_feather_cube_consistency(cube_data, use_memmap):
     '''
     Before fourier_combine_cubes is fully deprecated, check consistency
     with the output from feather_simple_cubes.
     '''
 
-    orig_cube, sd_cube, interf_cube = plaw_test_cube_sc
+    orig_fname, sd_fname, interf_fname = cube_data
 
-    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube)
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=False)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=False)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=False)
+
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=use_memmap)
 
     combo_cube_fcc = fourier_combine_cubes(interf_cube, sd_cube, return_hdu=True)
     combo_cube_fcc_sc = SpectralCube.read(combo_cube_fcc)
@@ -201,3 +284,99 @@ def test_feather_cube_consistency(plaw_test_cube_sc):
     assert diff_cube.max().value < 1e-10
     assert np.abs(diff_cube.min().value) < 1e-10
 
+
+def test_feather_simple_cube_dask_rechunk(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube.rechunk((-1, 256, 256))
+    interf_cube = interf_cube.rechunk((-1, 256, 256))
+
+    # This should rechunk the data and run
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        force_spatial_rechunk=True)
+
+    # This should fail on checking for a single spatial chunk
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            force_spatial_rechunk=False)
+    assert "Cubes must have a single chunk along the spatial axes." in exc.value.args[0]
+
+
+def test_feather_simple_cube_dask_mismatchsize(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube[:, :-1, :-1]
+
+    # This should reproject the data and run
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        allow_lo_reproj=True)
+
+    # This should fail on checkign for matching sizes
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            allow_lo_reproj=False)
+    assert "The cube_lo array shape does not match the cube_hi" in exc.value.args[0]
+
+def test_feather_simple_cube_dask_mismatchspec(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    interf_cube = interf_cube.spectral_interpolate(interf_cube.spectral_axis[::2])
+
+    # No working case here because our test data only has 3 channels. This should be OK
+    # as it's tested extensively in spectral-cube
+
+    # This should fail on checking for equivalent spec axes
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            allow_spectral_resample=False)
+    assert "Spectral axes do not match. Enable `allow_spectrum_resample` to " in exc.value.args[0]
+
+def test_feather_simple_cube_dask_mismatchunit(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube.to(u.Jy / u.beam)
+
+    # Unit matching should work when enabled.
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        match_units=True)
+
+    # This should fail on checking for units
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            match_units=False)
+    assert "Brightness units are not equivalent:" in exc.value.args[0]

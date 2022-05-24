@@ -1,5 +1,4 @@
 
-from multiprocessing.sharedctypes import Value
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -13,6 +12,7 @@ from astropy import wcs
 from astropy import stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from astropy.utils import deprecated
+from spectral_cube.dask_spectral_cube import DaskSpectralCube, DaskVaryingResolutionSpectralCube
 
 
 @deprecated("2022")
@@ -573,7 +573,13 @@ def feather_simple(hires, lores,
         raise ValueError("Brightness units are not equivalent: "
                          f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
 
-    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+    is_wcs_eq = proj_lo.wcs.wcs.compare(proj_lo.wcs.wcs)
+    is_eq_shape = proj_lo.shape == proj_hi.shape
+
+    if not is_wcs_eq or not is_eq_shape:
+        proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+    else:
+        proj_lo_regrid = proj_lo
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
@@ -973,9 +979,64 @@ def spectral_smooth_and_downsample(cube, kernelfwhm):
     return cube_ds_hdu
 
 
+try:
+    import dask
+    HAS_DASK = True
+except ImportError:
+    HAS_DASK = False
+
+if HAS_DASK:
+    import dask.array as da
+    from spectral_cube.dask_spectral_cube import add_save_to_tmp_dir_option
+
+    @add_save_to_tmp_dir_option
+    def _dask_feather_cubes(cube_hi, cube_lo,
+                            highresscalefactor=1.0,
+                            lowresscalefactor=1.0,
+                            weights=1.0,
+                            replace_hires=False,
+                            lowpassfilterSD=False,
+                            deconvSD=False):
+
+        lowresfwhm = cube_lo.beam.major
+
+        pixscale = wcs.utils.proj_plane_pixel_scales(cube_hi.wcs.celestial)[0]
+        nax2, nax1 = cube_hi.shape[1:]
+
+        # Do we need this wrapper here?
+        def feather_wrapper(img_hi, img_lo, **kwargs):
+
+            kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale,)
+
+            fftsum, combo = fftmerge(kfft, ikfft,
+                                    img_hi * highresscalefactor * weights,
+                                    img_lo * lowresscalefactor * weights,
+                                    replace_hires=replace_hires,
+                                    lowpassfilterSD=lowpassfilterSD,
+                                    deconvSD=deconvSD,
+                                    )
+
+            return combo.real
+
+        data_lo = cube_lo._get_filled_data(fill=np.nan)
+
+        feath_cube = cube_hi._map_blocks_to_cube(feather_wrapper,
+                                                 additional_arrays=[data_lo])
+
+        return feath_cube
+
+
+
+
 def feather_simple_cube(cube_hi, cube_lo,
                         allow_spectral_resample=True,
                         allow_huge_operations=False,
+                        use_memmap=True,
+                        use_dask=False,
+                        use_save_to_tmp_dir=False,
+                        force_spatial_rechunk=True,
+                        channels_per_chunk='auto',
+                        allow_lo_reproj=True,
                         **kwargs):
     """
     Parameters
@@ -993,6 +1054,29 @@ def feather_simple_cube(cube_hi, cube_lo,
         Sets `~spectral_cube.SpectralCube.allow_huge_operations`. If True, no memory related
         errors will be raise prior to computing. If False, an error will be raise if the cube
         size is too large (currently set to ~1 GB in spectral-cube).
+    use_memmap : bool
+        Enable saving the feathered cube to a memory-mapped array to avoid
+        having the whole output cube in memory.
+    use_dask : bool
+        Enable feathering using dask operations. See the `spectral-cube documentation <https://spectral-cube.readthedocs.io/en/latest/dask.html>`_
+        for more information on using dask with spectral-cube.
+    use_save_to_tmp_dir : bool
+        With `use_dask` enabled, when `True` will save intermediate operations
+        to a temporary zarr file. This forces dask to perform each computation and
+        can be useful for operations that are optimized with different rechunking
+        schemes.
+    force_spatial_rechunk : bool
+        With `use_dask` enabled, `True` forces rechunking both cubes to
+        ensure the chunk sizes match and have contiguous spatial chunks
+        (i.e., chunk only along the spectral axis).
+    channels_per_chunk : str or int
+        With `use_dask` enabled, allows setting the number of channels in each chunk.
+        The default is 'auto', allowing dask to choose the optimal chunk size. `-1` will
+        force the entire cube into a single chunk and may cause memory issues.
+    allow_lo_reproj : bool
+        With `use_dask` enabled, `cube_lo` will be reprojected to match
+        `cube_hi`. This step can otherwise be performed prior to feathering
+        but is needed to force alignment of the chunks in both cubes.
     kwargs : Passed to `~feather_simple`.
 
     Returns
@@ -1002,39 +1086,141 @@ def feather_simple_cube(cube_hi, cube_lo,
 
     """
 
-    # TODO: Can we paralellize, daskify, or otherwise not-in-memory-ify this?
-
     if not hasattr(cube_hi, 'shape'):
-        cube_hi = SpectralCube.read(cube_hi)
+        cube_hi = SpectralCube.read(cube_hi, use_dask=use_dask)
     if not hasattr(cube_lo, 'shape'):
-        cube_lo = SpectralCube.read(cube_lo)
+        cube_lo = SpectralCube.read(cube_lo, use_dask=use_dask)
+
+    # TODO: add VRSC dask suppoert
+    # Cannot handle varying res with dask yet
+    if isinstance(cube_lo, DaskVaryingResolutionSpectralCube):
+        raise TypeError("`feather_simple_cube` cannot yet handle varying resolution spectral cubes"
+                        " (beam size per channel). Use a non-dask for now.")
+
+    if isinstance(cube_lo, DaskSpectralCube):
+        save_kwargs = {"save_to_tmp_dir": use_save_to_tmp_dir}
+    else:
+        save_kwargs = {}
 
     cube_hi.allow_huge_operations = allow_huge_operations
     cube_lo.allow_huge_operations = allow_huge_operations
 
-    if cube_lo.shape[0]!=cube_hi.shape[0] or not all(cube_lo.spectral_axis == cube_hi.spectral_axis):
+    if cube_lo.shape[0] == cube_hi.shape[1]:
+        is_spec_matched = np.isclose(cube_lo.spectral_axis, cube_hi.spectral_axis).all()
+    else:
+        is_spec_matched = False
+
+    if not is_spec_matched:
         if allow_spectral_resample:
-            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis)
+            cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis, **save_kwargs)
         else:
             raise ValueError("Spectral axes do not match. Enable `allow_spectrum_resample` to "
                              "spectrally match the low resolution to high resolution data.")
 
-    feath_array = np.empty(cube_hi.shape)
+    # If cubes are DaskSpectralCubes, use the dask implementation
+    if isinstance(cube_hi, DaskSpectralCube) and isinstance(cube_lo, DaskSpectralCube):
 
-    pb = ProgressBar(cube_hi.shape[0])
-    for ii in range(cube_hi.shape[0]):
+        # The block mapping has to be the same. Set here whether to
+        # allow a prior reproject operation for the SD to match.
+        if allow_lo_reproj:
+            # Add a check to see if we can avoid reprojecting as it's expensive
+            # for whole cubes.
+            is_wcs_eq = cube_hi.wcs.celestial.wcs.compare(cube_lo.wcs.celestial.wcs)
+            is_eq_shape = cube_hi.shape == cube_lo.shape
 
-        hslc = cube_hi[ii]
-        lslc = cube_lo[ii]
+            if is_wcs_eq and is_eq_shape:
+                cube_lo_reproj = cube_lo
+            else:
+                # NOTE: is this memory friendly? We don't have a dedicated
+                # dask reprojection task, so this COULD break things.
+                cube_lo = cube_lo.rechunk((channels_per_chunk, -1, -1), **save_kwargs)
+                cube_lo_reproj = cube_lo.reproject(cube_hi.header, use_memmap=use_memmap)
+        else:
+            cube_lo_reproj = cube_lo
 
-        feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
+        # Check that the pixel sizes of both cubes now match
+        equal_sizes = cube_lo_reproj.shape == cube_hi.shape
+        if not equal_sizes:
+            raise ValueError("The cube_lo array shape does not match the cube_hi"
+                             " shape. Enable `allow_lo_reproj` or reproject cube_lo"
+                             " before feathering.")
 
-        pb.update()
+        # Ensure spatial chunk sizes are matched.
+        if force_spatial_rechunk:
+            chunksize = (channels_per_chunk, -1, -1)
+            cube_hi = cube_hi.rechunk(chunksize, **save_kwargs)
+            cube_lo_reproj = cube_lo_reproj.rechunk(chunksize, **save_kwargs)
 
-    feathcube = SpectralCube(data=feath_array,
-                             header=cube_hi.header,
-                             wcs=cube_hi.wcs,
-                             meta=cube_hi.meta)
+            if cube_hi._data.chunksize != cube_lo_reproj._data.chunksize:
+                raise ValueError("The chunk size does not match between the cubes."
+                                 f" cube_hi: {cube_hi._data.chunksize} "
+                                 f" cube_lo_reproj: {cube_lo_reproj._data.chunksize} "
+                                 "Check reprojection or apply prior to feathering.")
+
+        # Check that we have a single chunk size in the spatial dimensions.
+        # This is required for the fft per plane for feathering.
+        has_one_spatial_chunk_hi = cube_hi.shape[1:] == cube_hi._data.chunksize[1:]
+        has_one_spatial_chunk_lo = cube_lo.shape[1:] == cube_lo._data.chunksize[1:]
+
+        if not has_one_spatial_chunk_hi or not has_one_spatial_chunk_lo:
+            raise ValueError("Cubes must have a single chunk along the spatial axes."
+                             f" cube_lo has chunksize: {cube_lo._data.chunksize}."
+                             f" cube_hi has chunksize: {cube_hi._data.chunksize}."
+                             " Enable `force_spatial_rechunk=True` to rechunk the cubes.")
+
+        # Check kwargs for feather_simple kwarg to allow matching units
+        match_units = kwargs.pop('match_units', True)
+
+        # Check for units consistency
+        if match_units:
+            # After this step, the units of cube_hi are some sort of surface brightness
+            # unit equivalent to that specified in the high-resolution header's units
+
+            # NOTE: is this memory-friendly??
+            cube_lo_reproj = cube_lo_reproj.to(cube_hi.unit)
+
+            # When in a per-beam unit, we need to scale the low res to the
+            # Jy / beam for the HIRES beam.
+            jybm_unit = u.Jy / u.beam
+            if cube_hi.unit.is_equivalent(jybm_unit):
+                cube_lo_reproj *= (cube_hi.beam.sr / cube_lo_reproj.beam.sr).decompose().value
+
+        # Add check that the units are compatible
+        equiv_units = cube_lo_reproj.unit.is_equivalent(cube_hi.unit)
+        if not equiv_units:
+            raise ValueError("Brightness units are not equivalent: "
+                            f"hires: {cube_hi.unit}; lowres: {cube_lo_reproj.unit}")
+
+        feathcube = _dask_feather_cubes(cube_hi, cube_lo_reproj,
+                                        save_to_tmp_dir=use_save_to_tmp_dir,
+                                        **kwargs)
+
+    else:
+
+        if use_memmap:
+            from tempfile import NamedTemporaryFile
+            fname = NamedTemporaryFile()
+            feath_array = np.memmap(fname, shape=cube_hi.shape, dtype=float, mode='w+')
+        else:
+            feath_array = np.empty(cube_hi.shape)
+
+        pb = ProgressBar(cube_hi.shape[0])
+        for ii in range(cube_hi.shape[0]):
+
+            hslc = cube_hi[ii]
+            lslc = cube_lo[ii]
+
+            feath_array[ii] = feather_simple(hslc, lslc, **kwargs).real
+
+            pb.update()
+
+            if use_memmap:
+                feath_array.flush()
+
+        feathcube = SpectralCube(data=feath_array,
+                                header=cube_hi.header,
+                                wcs=cube_hi.wcs,
+                                meta=cube_hi.meta)
 
     return feathcube
 
