@@ -284,3 +284,99 @@ def test_feather_cube_consistency(cube_data, use_memmap):
     assert diff_cube.max().value < 1e-10
     assert np.abs(diff_cube.min().value) < 1e-10
 
+
+def test_feather_simple_cube_dask_rechunk(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube.rechunk((-1, 256, 256))
+    interf_cube = interf_cube.rechunk((-1, 256, 256))
+
+    # This should rechunk the data and run
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        force_spatial_rechunk=True)
+
+    # This should fail on checking for a single spatial chunk
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            force_spatial_rechunk=False)
+    assert "Cubes must have a single chunk along the spatial axes." in exc.value.args[0]
+
+
+def test_feather_simple_cube_dask_mismatchsize(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube[:, :-1, :-1]
+
+    # This should reproject the data and run
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        allow_lo_reproj=True)
+
+    # This should fail on checkign for matching sizes
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            allow_lo_reproj=False)
+    assert "The cube_lo array shape does not match the cube_hi" in exc.value.args[0]
+
+def test_feather_simple_cube_dask_mismatchspec(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    interf_cube = interf_cube.spectral_interpolate(interf_cube.spectral_axis[::2])
+
+    # No working case here because our test data only has 3 channels. This should be OK
+    # as it's tested extensively in spectral-cube
+
+    # This should fail on checking for equivalent spec axes
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            allow_spectral_resample=False)
+    assert "Spectral axes do not match. Enable `allow_spectrum_resample` to " in exc.value.args[0]
+
+def test_feather_simple_cube_dask_mismatchunit(cube_data):
+
+    use_dask = True
+
+    orig_fname, sd_fname, interf_fname = cube_data
+
+    orig_cube, orig_data = cube_and_raw(orig_fname, use_dask=use_dask)
+    sd_cube, sd_data = cube_and_raw(sd_fname, use_dask=use_dask)
+    interf_cube, interf_data = cube_and_raw(interf_fname, use_dask=use_dask)
+
+    sd_cube = sd_cube.to(u.Jy / u.beam)
+
+    # Unit matching should work when enabled.
+    combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                        use_memmap=False,
+                                        match_units=True)
+
+    # This should fail on checking for units
+    with pytest.raises(ValueError) as exc:
+        combo_cube_sc = feather_simple_cube(interf_cube, sd_cube,
+                                            use_memmap=False,
+                                            match_units=False)
+    assert "Brightness units are not equivalent:" in exc.value.args[0]
