@@ -573,7 +573,10 @@ def feather_simple(hires, lores,
         raise ValueError("Brightness units are not equivalent: "
                          f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
 
-    proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+    is_wcs_eq = proj_lo.wcs.wcs.compare(proj_lo.wcs.wcs)
+
+    if not is_wcs_eq:
+        proj_lo_regrid = proj_lo.reproject(proj_hi.header)
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
@@ -1111,10 +1114,16 @@ def feather_simple_cube(cube_hi, cube_lo,
         # The block mapping has to be the same. Set here whether to
         # allow a prior reproject operation for the SD to match.
         if allow_lo_reproj:
-            # NOTE: is this memory friendly? We don't have a dedicated
-            # dask reprojection task, so this COULD break things.
-            cube_lo = cube_lo.rechunk(('auto', -1, -1), **save_kwargs)
-            cube_lo_reproj = cube_lo.reproject(cube_hi.header, use_memmap=use_memmap)
+            # Add a check to see if we can avoid reprojecting as it's expensive
+            # for whole cubes.
+            is_wcs_eq = cube_hi.wcs.celestial.wcs.compare(cube_lo.wcs.celestial.wcs)
+            if is_wcs_eq:
+                cube_lo_reproj = cube_lo
+            else:
+                # NOTE: is this memory friendly? We don't have a dedicated
+                # dask reprojection task, so this COULD break things.
+                cube_lo = cube_lo.rechunk((channels_per_chunk, -1, -1), **save_kwargs)
+                cube_lo_reproj = cube_lo.reproject(cube_hi.header, use_memmap=use_memmap)
         else:
             cube_lo_reproj = cube_lo
 
@@ -1127,7 +1136,7 @@ def feather_simple_cube(cube_hi, cube_lo,
 
         # Ensure spatial chunk sizes are matched.
         if force_spatial_rechunk:
-            chunksize = (channels_per_chunk, ) + (-1, -1)
+            chunksize = (channels_per_chunk, -1, -1)
             cube_hi = cube_hi.rechunk(chunksize, **save_kwargs)
             cube_lo_reproj = cube_lo_reproj.rechunk(chunksize, **save_kwargs)
 
