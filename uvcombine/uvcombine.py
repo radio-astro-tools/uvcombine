@@ -574,8 +574,9 @@ def feather_simple(hires, lores,
                          f"hires: {proj_hi.unit}; lowres: {proj_lo.unit}")
 
     is_wcs_eq = proj_lo.wcs.wcs.compare(proj_lo.wcs.wcs)
+    is_eq_shape = proj_lo.shape == proj_hi.shape
 
-    if not is_wcs_eq:
+    if not is_wcs_eq or not is_eq_shape:
         proj_lo_regrid = proj_lo.reproject(proj_hi.header)
     else:
         proj_lo_regrid = proj_lo
@@ -1119,7 +1120,9 @@ def feather_simple_cube(cube_hi, cube_lo,
             # Add a check to see if we can avoid reprojecting as it's expensive
             # for whole cubes.
             is_wcs_eq = cube_hi.wcs.celestial.wcs.compare(cube_lo.wcs.celestial.wcs)
-            if is_wcs_eq:
+            is_eq_shape = cube_hi.shape == cube_lo.shape
+
+            if is_wcs_eq and is_eq_shape:
                 cube_lo_reproj = cube_lo
             else:
                 # NOTE: is this memory friendly? We don't have a dedicated
