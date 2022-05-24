@@ -1093,9 +1093,12 @@ def feather_simple_cube(cube_hi, cube_lo,
     cube_hi.allow_huge_operations = allow_huge_operations
     cube_lo.allow_huge_operations = allow_huge_operations
 
-    is_spec_matched = np.isclose(cube_lo.spectral_axis, cube_hi.spectral_axis).all()
+    if cube_lo.shape[0] == cube_hi.shape[1]:
+        is_spec_matched = np.isclose(cube_lo.spectral_axis, cube_hi.spectral_axis).all()
+    else:
+        is_spec_matched = False
 
-    if cube_lo.shape[0]!=cube_hi.shape[0] or not is_spec_matched:
+    if not is_spec_matched:
         if allow_spectral_resample:
             cube_lo = cube_lo.spectral_interpolate(cube_hi.spectral_axis, **save_kwargs)
         else:
