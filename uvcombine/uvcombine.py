@@ -577,6 +577,8 @@ def feather_simple(hires, lores,
 
     if not is_wcs_eq:
         proj_lo_regrid = proj_lo.reproject(proj_hi.header)
+    else:
+        proj_lo_regrid = proj_lo
 
     # Apply the pbresponse to the regridded low-resolution data
     if pbresponse is not None:
