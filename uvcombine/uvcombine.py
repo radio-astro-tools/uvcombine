@@ -1029,6 +1029,7 @@ def feather_simple_cube(cube_hi, cube_lo,
                         use_dask=False,
                         use_save_to_tmp_dir=False,
                         force_spatial_rechunk=True,
+                        channels_per_chunk='auto',
                         allow_lo_reproj=True,
                         **kwargs):
     """
@@ -1062,6 +1063,10 @@ def feather_simple_cube(cube_hi, cube_lo,
         With `use_dask` enabled, `True` forces rechunking both cubes to
         ensure the chunk sizes match and have contiguous spatial chunks
         (i.e., chunk only along the spectral axis).
+    channels_per_chunk : str or int
+        With `use_dask` enabled, allows setting the number of channels in each chunk.
+        The default is 'auto', allowing dask to choose the optimal chunk size. `-1` will
+        force the entire cube into a single chunk and may cause memory issues.
     allow_lo_reproj : bool
         With `use_dask` enabled, `cube_lo` will be reprojected to match
         `cube_hi`. This step can otherwise be performed prior to feathering
@@ -1119,14 +1124,26 @@ def feather_simple_cube(cube_hi, cube_lo,
 
         # Ensure spatial chunk sizes are matched.
         if force_spatial_rechunk:
-            cube_hi = cube_hi.rechunk(('auto', -1, -1), **save_kwargs)
-            cube_lo_reproj = cube_lo_reproj.rechunk(('auto', -1, -1), **save_kwargs)
+            chunksize = (channels_per_chunk, ) + (-1, -1)
+            cube_hi = cube_hi.rechunk(chunksize, **save_kwargs)
+            cube_lo_reproj = cube_lo_reproj.rechunk(chunksize, **save_kwargs)
 
             if cube_hi._data.chunksize != cube_lo_reproj._data.chunksize:
                 raise ValueError("The chunk size does not match between the cubes."
                                  f" cube_hi: {cube_hi._data.chunksize} "
                                  f" cube_lo_reproj: {cube_lo_reproj._data.chunksize} "
                                  "Check reprojection or apply prior to feathering.")
+
+        # Check that we have a single chunk size in the spatial dimensions.
+        # This is required for the fft per plane for feathering.
+        has_one_spatial_chunk_hi = cube_hi.shape[1:] == cube_hi._data.chunkshape[1:]
+        has_one_spatial_chunk_lo = cube_lo.shape[1:] == cube_lo._data.chunkshape[1:]
+
+        if not has_one_spatial_chunk_hi or not has_one_spatial_chunk_lo:
+            raise ValueError("Cubes must have a single chunk along the spatial axes."
+                             f" cube_lo has chunksize: {cube_lo._data.chunksize}."
+                             f" cube_hi has chunksize: {cube_hi._data.chunksize}."
+                             " Enable `force_spatial_rechunk=True` to rechunk the cubes.")
 
         # Check kwargs for feather_simple kwarg to allow matching units
         match_units = kwargs.pop('match_units', True)
@@ -1170,7 +1187,7 @@ def feather_simple_cube(cube_hi, cube_lo,
             hslc = cube_hi[ii]
             lslc = cube_lo[ii]
 
-            feath_array[ii] = feather_simple(hslc, lslc, **kwargs)
+            feath_array[ii] = feather_simple(hslc, lslc, **kwargs).real
 
             pb.update()
 
