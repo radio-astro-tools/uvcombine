@@ -22,6 +22,24 @@ For more information on the feathering settings available, see :ref:`featherimag
 For large cubes, the `use_memmap` option can be enabled to avoid keeping the feathered
 cube in memory.
 
+.. note:: When there is a large difference in the spectral channels between the two cubes,
+    we recommend following the `spectral-cube smoothing guide <https://spectral-cube.readthedocs.io/en/latest/smoothing.html#spectral-smoothing>`
+    to appropriately smooth the higher spectral resolution data prior to interpolation prior to using
+    `~uvcombine.feather_simple_cube`, as this only applies the interpolation step.
+
+If the cubes you are using have already been appropriately smoothed and/or reprojected, you can avoid
+unnecessary pre-processing using the kwargs for `~uvcombine.feather_simple_cube`. To avoid
+spectral interpolation of the low resolution data::
+
+    >>> feathered_cube = feather_simple_cube(highres_cube, lowres_cube, allow_spectral_resample=False)  # doctest: +SKIP
+
+To avoid reprojecting the low resolution data::
+
+    >>> feathered_cube = feather_simple_cube(highres_cube, lowres_cube, allow_lo_reproj=False)  # doctest: +SKIP
+
+In both cases, consistency checks are applied and a `ValueError` describing any discrepancies will be
+returned.
+
 Feathering large cubes using dask
 ---------------------------------
 
@@ -47,6 +65,10 @@ To enable this mode, `use_save_to_tmp_dir <https://spectral-cube.readthedocs.io/
 can be enabled in `~uvcombine.feather_simple_cube`::
 
     >>> feathered_cube = feather_simple_cube(highres_cube, lowres_cube, use_save_to_tmp_dir=True)  # doctest: +SKIP
+
+If the cubes already have matching chunk size, you can avoid rechunking the cubes with::
+
+    >>> feathered_cube = feather_simple_cube(highres_cube, lowres_cube, force_spatial_rechunk=False)  # doctest: +SKIP
 
 
 Previous functionality
