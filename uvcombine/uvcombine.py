@@ -1160,11 +1160,11 @@ def feather_simple_cube(cube_hi, cube_lo,
         # Check that we have a single chunk size in the spatial dimensions.
         # This is required for the fft per plane for feathering.
         has_one_spatial_chunk_hi = cube_hi.shape[1:] == cube_hi._data.chunksize[1:]
-        has_one_spatial_chunk_lo = cube_lo.shape[1:] == cube_lo._data.chunksize[1:]
+        has_one_spatial_chunk_lo = cube_lo_reproj.shape[1:] == cube_lo_reproj._data.chunksize[1:]
 
         if not has_one_spatial_chunk_hi or not has_one_spatial_chunk_lo:
             raise ValueError("Cubes must have a single chunk along the spatial axes."
-                             f" cube_lo has chunksize: {cube_lo._data.chunksize}."
+                             f" cube_lo has chunksize: {cube_lo_reproj._data.chunksize}."
                              f" cube_hi has chunksize: {cube_hi._data.chunksize}."
                              " Enable `force_spatial_rechunk=True` to rechunk the cubes.")
 
