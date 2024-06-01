@@ -67,8 +67,8 @@ def test_feather_simple(plaw_test_data):
     assert nmse < 3e-2
 
     # Test against structural similarity metric
-    min_val = min(min(orig_data), min(combo.real))
-    max_val = max(max(orig_data), max(combo.real))
+    min_val = min(orig_data.min(), combo.real.min())
+    max_val = max(orig_data.max(), combo.real.max())
     ssim = structural_similarity(orig_data, combo.real,
                                  data_range=max_val-min_val)
     assert ssim > 0.99
@@ -194,9 +194,13 @@ def test_feather_simple_cube(cube_data, use_dask, use_memmap):
     # Test against structural similarity metric
     # Compare channel vs. channel
     for ii in range(orig_cube.shape[0]):
+        min_val = min(orig_cube.unitless_filled_data[ii].min(),
+                      combo_cube_sc.unitless_filled_data[ii].min())
+        max_val = max(orig_cube.unitless_filled_data[ii].max(),
+                      combo_cube_sc.unitless_filled_data[ii].max())
         ssim = structural_similarity(orig_cube.unitless_filled_data[ii],
                                     combo_cube_sc.unitless_filled_data[ii],
-                                    )
+                                    data_range=max_val - min_val)
         assert ssim > 0.99
 
 
