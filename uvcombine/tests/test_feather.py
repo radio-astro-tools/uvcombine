@@ -67,7 +67,10 @@ def test_feather_simple(plaw_test_data):
     assert nmse < 3e-2
 
     # Test against structural similarity metric
-    ssim = structural_similarity(orig_data, combo.real)
+    min_val = min(min(orig_data), min(combo.real))
+    max_val = max(max(orig_data), max(combo.real))
+    ssim = structural_similarity(orig_data, combo.real,
+                                 data_range=max_val-min_val)
     assert ssim > 0.99
 
 
