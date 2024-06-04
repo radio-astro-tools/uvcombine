@@ -11,6 +11,14 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            python-version: "3.10"
+            name: Python 3.10 with minimal dependencies
+            toxenv: py310-test
+          - os: ubuntu-latest
+            python-version: 3.11
+            name: Python 3.11 with minimal dependencies
+            toxenv: py311-test
+          - os: ubuntu-latest
             python-version: 3.9
             name: Python 3.9 with minimal dependencies
             toxenv: py39-test
@@ -42,9 +50,15 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install testing dependencies
-      run: python -m pip install tox codecov
+      run: |
+        python -m pip install tox codecov
+        mkdir ${GITHUB_WORKSPACE}/.casa
+        echo "datapath=['${GITHUB_WORKSPACE}/.casa/']; measurespath=datapath[0]; measures_auto_update=True; data_auto_update=True" > $GITHUB_WORKSPACE/config.py
+        pip install casadata
+        export CASASITECONFIG=$GITHUB_WORKSPACE/config.py
+
     - name: Run tests with ${{ matrix.name }}
-      run: tox -v -e ${{ matrix.toxenv }}
+      run: CASASITECONFIG=$GITHUB_WORKSPACE/config.py tox -v -e ${{ matrix.toxenv }}
     - name: Upload coverage to codecov
       if: ${{ contains(matrix.toxenv,'-cov') }}
       uses: codecov/codecov-action@v1.0.13
