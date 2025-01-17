@@ -7,7 +7,7 @@ interferometric data.
 """
 
 from astropy import units as u
-from astropy.utils.console import ProgressBar
+from tqdm import tqdm
 import numpy as np
 from astropy import stats as astrostats
 from scipy import stats
@@ -64,7 +64,7 @@ def find_effSDbeam(hires, lores,
     slopes = np.empty(lowresfwhms.size)
     slopes_CI = np.empty((2, lowresfwhms.size))
 
-    for i, lowresfwhm in enumerate(ProgressBar(lowresfwhms)):
+    for i, lowresfwhm in enumerate(tqdm(lowresfwhms)):
         out = feather_compare(hires, lores,
                               SAS=lowresfwhm,
                               LAS=LAS,

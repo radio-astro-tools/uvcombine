@@ -1,4 +1,6 @@
 
+from tqdm import tqdm
+
 import radio_beam
 from reproject import reproject_interp
 from spectral_cube import SpectralCube, Projection
@@ -6,7 +8,6 @@ from spectral_cube import wcs_utils
 from astropy.io import fits
 from astropy import units as u
 from astropy import log
-from astropy.utils.console import ProgressBar
 import numpy as np
 from astropy import wcs
 from astropy import stats
@@ -683,7 +684,7 @@ def feather_plot(hires, lores,
         proj_lo = lores
 
     print("featherplot")
-    pb = ProgressBar(13)
+    pb = tqdm(13)
 
     if match_units:
         # After this step, the units of im_hi are some sort of surface brightness
@@ -907,7 +908,7 @@ def spectral_regrid(cube, outgrid):
     yy,xx = np.indices(cube.shape[1:])
 
     log.info("Regridding images.")
-    pb = ProgressBar(xx.size)
+    pb = tqdm(xx.size)
     for ix, iy in (zip(xx.flat, yy.flat)):
         newcube[:,iy,ix] = np.interp(outgrid.value, inaxis.value,
                                      cubedata[:,iy,ix].value)
@@ -1204,7 +1205,7 @@ def feather_simple_cube(cube_hi, cube_lo,
         else:
             feath_array = np.empty(cube_hi.shape)
 
-        pb = ProgressBar(cube_hi.shape[0])
+        pb = tqdm(cube_hi.shape[0])
         for ii in range(cube_hi.shape[0]):
 
             hslc = cube_hi[ii]
@@ -1314,7 +1315,7 @@ def fourier_combine_cubes(cube_hi, cube_lo,
     kfft, ikfft = feather_kernel(nax2, nax1, lowresfwhm, pixscale)
 
     log.info("Fourier combining each of {0} slices".format(dcube_hi.shape[0]))
-    pb = ProgressBar(dcube_hi.shape[0])
+    pb = tqdm(dcube_hi.shape[0])
 
     for ii,(slc_hi,slc_lo) in enumerate(zip(dcube_hi, dcube_lo)):
 
