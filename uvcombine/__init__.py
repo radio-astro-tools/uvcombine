@@ -2,8 +2,6 @@
 
 from ._astropy_init import __version__, test
 
-from pkg_resources import get_distribution, DistributionNotFound
-
 # For egg_info test builds to pass, put package imports here.
 from .uvcombine import (feather_plot, feather_simple, feather_compare,
                         fourier_combine_cubes, feather_simple_cube)
