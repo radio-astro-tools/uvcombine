@@ -4,7 +4,6 @@
 from __future__ import print_function, absolute_import, division
 
 import os
-from distutils.version import LooseVersion
 
 import pytest
 import numpy as np
