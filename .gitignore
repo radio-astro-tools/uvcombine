@@ -54,3 +54,13 @@ distribute-*.tar.gz
 *.ipynb_checkpoints
 examples/*.png
 *.png
+
+# Backup files left behind by editors/CASA sessions
+*.pybck
+*.ipynbbck
+*.orig
+casapy-*.log
+casa-*.log
+ipython-*.log
+ipython_log_*.py
+*.last

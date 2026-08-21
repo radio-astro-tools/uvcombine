@@ -47,6 +47,10 @@ dev = [
     "spectral-cube>=0.0.dev0",
     "radio-beam>=0.0.dev0",
 ]
+notebooks = [
+    "pre-commit",
+    "nbstripout",
+]
 
 [project.urls]
 homepage = "https://uvcombine.readthedocs.org"
