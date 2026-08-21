@@ -19,7 +19,7 @@ except ImportError:
 from .. import feather_simple
 
 @pytest.mark.skipif('not casa_imported')
-@pytest.mark.parametrize(('sdfactor', 'lowpassfilterSD'), itertools.product((0.5, 1, 1.5), (True,False)))
+@pytest.mark.parametrize(('sdfactor', 'lowpassfilterSD'), list(itertools.product((0.5, 1, 1.5), (True,False))))
 def test_casafeather(image_sz512as_pl1p5_fwhm2as_scale1as, sdfactor, lowpassfilterSD):
 
     tmp_path, input_fn, intf_fn, sd_fn = image_sz512as_pl1p5_fwhm2as_scale1as

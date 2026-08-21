@@ -51,6 +51,9 @@ notebooks = [
     "pre-commit",
     "nbstripout",
 ]
+all = [
+  "uvcombine[test,docs]",
+]
 
 [project.urls]
 homepage = "https://uvcombine.readthedocs.org"
