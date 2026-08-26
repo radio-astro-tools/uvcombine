@@ -1,4 +1,5 @@
-# uvcombine
+uvcombine
+=========
 
 uvcombine provides tools for combining high-resolution images with missing large angular scales (Fourier-domain short-spacings)
 with low-resolution images containing the short/zero spacing, including:
@@ -21,3 +22,12 @@ with outputs is pushed. To set up the hook locally::
 
 Notebooks with their outputs executed are kept on the ``with-output`` branch
 instead; it is refreshed manually (not by CI) whenever an example notebook changes.
+
+Worked notebook examples of the uvcombine functionality can be found in the `examples <https://github.com/uvcombine/uvcombine/tree/master/examples>`_ directory.
+
+radio-astro-tools
+^^^^^^^^^^^^^^^^^
+
+This package is part of the radio-astro-tools project. See
+`radio-astro-tools <https://radio-astro-tools.github.io/>`_ for more information.
+

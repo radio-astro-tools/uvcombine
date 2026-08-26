@@ -6,24 +6,27 @@ Requirements
 
 This package has the following dependencies:
 
-* `Python <http://www.python.org>`_ 3.6 or later (Python 3.x is supported)
+* `Python <http://www.python.org>`_ 3.10 or later
 * `Numpy <http://www.numpy.org>`_ 1.8 or later
-* `Astropy <http://www.astropy.org>`__ 1.0 or later
-* `six <http://pypi.python.org/pypi/six/>`__
+* `Astropy <http://www.astropy.org>`__ 6.1 or later
+*  matplotlib 3.5 or later
+*  reproject 0.13 or later
+*  spectral-cube 0.4.0 or later
+*  radio-beam 0.3.5 or later
+*  tqdm
 
 Installation
 ------------
 
-..
-    To install the latest stable release, you can type::
+To install the latest stable release, you can type::
 
-..
     pip install uvcombine
 
 You can download the latest tar file from
 `PyPI <https://pypi.python.org/pypi/uvcombine>`_ and install it using::
 
     pip install -e .
+
 
 Developer version
 -----------------
