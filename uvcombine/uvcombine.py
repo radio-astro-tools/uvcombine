@@ -15,6 +15,12 @@ from astropy.convolution import convolve_fft, Gaussian2DKernel
 from spectral_cube.dask_spectral_cube import DaskSpectralCube, DaskVaryingResolutionSpectralCube
 
 
+def _plot_axis_limits(xaxis, arg_xmin):
+    """Return numeric plot limits for unitless or Quantity-like axes."""
+    values = np.asarray(xaxis)
+    return values[arg_xmin] / 1.1, values[1] * 1.1
+
+
 def feather_kernel(nax2, nax1, lowresfwhm, pixscale):
     """
     Construct the weight kernels (image arrays) for the fourier transformed low
@@ -578,7 +584,7 @@ def feather_plot(hires, lores,
     ax1.set_ylim(1e-5, 1.1)
 
     arg_xmin = np.nanargmin(np.abs((azavg_ikernel)-(1-1e-5)))
-    xlim = xaxis[arg_xmin].value / 1.1, xaxis[1].value * 1.1
+    xlim = _plot_axis_limits(xaxis, arg_xmin)
     log.debug("Xlim: {0}".format(xlim))
     assert np.isfinite(xlim[0])
     assert np.isfinite(xlim[1])
