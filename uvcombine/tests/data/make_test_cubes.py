@@ -1,11 +1,11 @@
 import numpy as np
 from uvcombine import utils
 from uvcombine import feather_simple
-from uvcombine.unit_utils import convert_to_casa
 from astropy import units as u
 from astropy import log
 from astropy.io import fits
 import radio_beam
+from spectral_cube import SpectralCube, Projection
 
 if __name__ == "__main__":
 
@@ -28,7 +28,8 @@ if __name__ == "__main__":
                                header=input_hdu.header
                               )
     intf_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_intf2to40as.fits"
-    convert_to_casa(intf_hdu).writeto(intf_fn, overwrite=True)
+    Projection.from_hdu(intf_hdu).to(u.Jy/u.beam).write(intf_fn, overwrite=True)
+    # convert_to_casa(intf_hdu).writeto(intf_fn, overwrite=True)
 
     log.info("make SD image")
     sd_header = input_hdu.header.copy()
@@ -38,7 +39,9 @@ if __name__ == "__main__":
                                              beam=radio_beam.Beam(33*u.arcsec))
     sd_hdu = fits.PrimaryHDU(data=sd_data, header=sd_header)
     sd_fn = "input_image_sz512as_pl1.5_fwhm2as_scale1as_sd33as.fits"
-    convert_to_casa(sd_hdu).writeto(sd_fn, overwrite=True)
+    Projection.from_hdu(sd_hdu).to(u.Jy/u.beam).write(sd_fn, overwrite=True)
+
+    # convert_to_casa(sd_hdu).writeto(sd_fn, overwrite=True)
 
     log.info("Feather data")
     feathered_hdu = feather_simple(hires=intf_hdu, lores=sd_hdu, return_hdu=True)
