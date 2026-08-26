@@ -47,6 +47,9 @@ dev = [
     "spectral-cube>=0.0.dev0",
     "radio-beam>=0.0.dev0",
 ]
+all = [
+  "uvcombine[test,docs]",
+]
 
 [project.urls]
 homepage = "https://uvcombine.readthedocs.org"
