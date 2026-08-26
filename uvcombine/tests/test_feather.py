@@ -12,7 +12,17 @@ from skimage.metrics import structural_similarity, normalized_root_mse
 
 from . import path
 
-from ..uvcombine import (feather_simple, feather_simple_cube)
+from ..uvcombine import (_plot_axis_limits, feather_simple, feather_simple_cube)
+
+
+@pytest.mark.parametrize("xaxis", (
+    np.array([10., 20., 30.]),
+    np.array([10., 20., 30.]) * u.arcsec,
+))
+def test_plot_axis_limits(xaxis):
+    xlim = _plot_axis_limits(xaxis, arg_xmin=2)
+
+    npt.assert_allclose(xlim, (30. / 1.1, 20. * 1.1))
 
 
 def cube_and_raw(filename, use_dask=None):
