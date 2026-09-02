@@ -236,10 +236,11 @@ def feather_simple(hires, lores,
 
     Parameters
     ----------
-    highresfitsfile : str
-        The high-resolution FITS file
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
+    hires : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The high-resolution image, as a FITS filename, FITS HDU, or Projection.
+    lores : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The low-resolution (single-dish) image, as a FITS filename, FITS HDU,
+        or Projection.
     highresextnum : int
         The extension number to use from the high-res FITS file
     lowresextnum : int
@@ -252,8 +253,8 @@ def feather_simple(hires, lores,
         low- or high-resolution data
     pbresponse : `~numpy.ndarray`
         The primary beam response of the high-resolution data. When given,
-        `highresfitsfile` should **not** be primary-beam corrected.
-        `pbresponse` will be multiplied with `lowresfitsfile`, and the
+        `hires` should **not** be primary-beam corrected.
+        `pbresponse` will be multiplied with `lores`, and the
         feathered image will be divided by `pbresponse` to create the final
         image.
     lowresfwhm : `astropy.units.Quantity`
@@ -416,20 +417,28 @@ def feather_plot(hires, lores,
 
     Parameters
     ----------
-    highresfitsfile : str
-        The high-resolution FITS file
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
+    hires : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The high-resolution image, as a FITS filename, FITS HDU, or Projection.
+    lores : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The low-resolution (single-dish) image, as a FITS filename, FITS HDU,
+        or Projection.
     highresextnum : int
         The extension number to use from the high-res FITS file
+    lowresextnum : int
+        The extension number to use from the low-res FITS file
     highresscalefactor : float
+        A factor to multiply the high-resolution data by to match the
+        low- or high-resolution data
     lowresscalefactor : float
-        A factor to multiply the high- or low-resolution data by to match the
+        A factor to multiply the low-resolution data by to match the
         low- or high-resolution data
     lowresfwhm : `astropy.units.Quantity`
         The full-width-half-max of the single-dish (low-resolution) beam;
         or the scale at which you want to try to match the low/high resolution
         data
+    lowpassfilterSD : bool or str
+        Re-convolve the SD image with the beam before computing its power
+        spectrum. See `~uvcombine.feather_simple` for details.
     xaxisunit : 'arcsec' or 'lambda'
         The X-axis units.  Either arcseconds (angular scale on the sky)
         or baseline length (lambda)
@@ -443,10 +452,16 @@ def feather_plot(hires, lores,
 
     Returns
     -------
-    combo : image
-        The image of the combined low and high resolution data sets
-    combo_hdu : fits.PrimaryHDU
-        (optional) the image encased in a FITS HDU with the relevant header
+    results : dict
+        Dictionary with the azimuthally-averaged power spectra used to make
+        the plot: ``radius`` and ``radius_as`` (the radial/angular scale
+        axis), ``azimuthally_averaged_kernel`` and
+        ``azimuthally_averaged_inverse_kernel`` (the low- and high-res
+        weighting kernels), ``azimuthally_averaged_low_resolution`` and
+        ``azimuthally_averaged_high_resolution`` (the raw power spectra), and
+        ``azimuthally_averaged_low_res_filtered`` and
+        ``azimuthally_averaged_high_res_filtered`` (the power spectra after
+        applying the feathering kernels).
     """
     # import image_tools
     from turbustat.statistics.psds import pspec
@@ -903,10 +918,11 @@ def feather_compare(hires, lores,
 
     Parameters
     ----------
-    highresfitsfile : str
-        The high-resolution FITS file
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
+    hires : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The high-resolution image, as a FITS filename, FITS HDU, or Projection.
+    lores : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The low-resolution (single-dish) image, as a FITS filename, FITS HDU,
+        or Projection.
     SAS : `astropy.units.Quantity`
         The smallest angular scale to plot
     LAS : `astropy.units.Quantity`
@@ -1066,10 +1082,11 @@ def angular_range_image_comparison(hires, lores, SAS, LAS, lowresfwhm,
 
     Parameters
     ----------
-    highresfitsfile : str
-        The high-resolution FITS file
-    lowresfitsfile : str
-        The low-resolution (single-dish) FITS file
+    hires : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The high-resolution image, as a FITS filename, FITS HDU, or Projection.
+    lores : str or `~astropy.io.fits.PrimaryHDU` or `~spectral_cube.Projection`
+        The low-resolution (single-dish) image, as a FITS filename, FITS HDU,
+        or Projection.
     SAS : `astropy.units.Quantity`
         The smallest angular scale to plot
     LAS : `astropy.units.Quantity`

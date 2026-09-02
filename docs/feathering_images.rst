@@ -33,5 +33,5 @@ images when combining.
 * ``weights`` allows a 2D numpy array matching the high-resolution image size to be used as custom weighting, similar to the ``pbresponse``. This can be used to taper the edges of images to avoid Gibbs ringing.
 
 
-The impact of these many options is explored in depth in `this tutorial <https://github.com/radio-astro-tools/uvcombine/blob/master/examples/FeatheringTests.ipynb>`_.
+The impact of these many options is explored in depth in `this tutorial <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/FeatheringTests.ipynb>`_.
 
