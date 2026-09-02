@@ -14,6 +14,8 @@ from astropy import stats
 from astropy.convolution import convolve_fft, Gaussian2DKernel
 from spectral_cube.dask_spectral_cube import DaskSpectralCube, DaskVaryingResolutionSpectralCube
 
+from .pspec import pspec
+
 
 def _plot_axis_limits(xaxis, arg_xmin):
     """Return numeric plot limits for unitless or Quantity-like axes."""
@@ -463,9 +465,6 @@ def feather_plot(hires, lores,
         ``azimuthally_averaged_high_res_filtered`` (the power spectra after
         applying the feathering kernels).
     """
-    # import image_tools
-    from turbustat.statistics.psds import pspec
-
     if isinstance(hires, str):
         hdu_hi = fits.open(hires)[highresextnum]
         proj_hi = Projection.from_hdu(hdu_hi)
