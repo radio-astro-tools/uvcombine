@@ -33,6 +33,10 @@ default a diagnostic plot is produced (``doplot=True``); set
 samples (angular scale, ratio, and high-/low-resolution amplitudes) in
 the overlap region rather than the summary statistics.
 
+`ScaleFactors.ipynb <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/ScaleFactors.ipynb>`_
+compares several methods for finding this scale factor from the
+uv-overlap region.
+
 Plotting the power spectra
 ---------------------------
 

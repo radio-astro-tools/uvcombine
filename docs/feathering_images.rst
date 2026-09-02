@@ -20,6 +20,8 @@ In the simplest case, a low- and high-resolution image can be feathered with::
 
 The defaults settings in `~uvcombine.feather_simple` match those used by CASA's
 `feather task <https://casadocs.readthedocs.io/en/stable/api/tt/casatasks.imaging.feather.html>`_.
+A worked comparison against CASA's own ``feather`` task is available in
+`example_uvcombine_casa_feather_comparison.py <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/example_uvcombine_casa_feather_comparison.py>`_.
 
 `~uvcombine.feather_simple` has many options to alter the handling, uv-cutoff, or weighting of the two
 images when combining.
@@ -29,9 +31,15 @@ images when combining.
 * ``lowresfwhm`` overrides the beam size in the low resolution data.
 * ``lowpassfilterSD`` filters high spatial frequenceis in the low resolution image by its beam. Similar to ``lowpassfiltersd`` in CASA.
 * ``replace_hires`` will replace the high spatial frequencies of the feathered image above a set threshold in the low resolution beam kernel, rather than combining by the weighting kernel.
-* ``deconvSD`` will deconvolve the low resolution data by its beam before combining the data.
+* ``deconvSD`` will deconvolve the low resolution data by its beam before combining the data. See
+  `DeconvolutionTests.ipynb <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/DeconvolutionTests.ipynb>`_
+  for a walkthrough of the available deconvolution techniques and
+  `deconvolution_experiments.py <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/deconvolution_experiments.py>`_
+  for additional experiments.
 * ``weights`` allows a 2D numpy array matching the high-resolution image size to be used as custom weighting, similar to the ``pbresponse``. This can be used to taper the edges of images to avoid Gibbs ringing.
 
 
 The impact of these many options is explored in depth in `this tutorial <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/FeatheringTests.ipynb>`_.
+For a comparison of this Fourier-space ("uv") approach against a simpler real-space
+linear combination, see `Compare Linear to UV.ipynb <https://github.com/radio-astro-tools/uvcombine/blob/main/examples/Compare%20Linear%20to%20UV.ipynb>`_.
 
