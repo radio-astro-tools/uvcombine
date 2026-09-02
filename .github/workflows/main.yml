@@ -11,7 +11,7 @@ on:
 
 jobs:
   tests:
-    uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v2
+    uses: OpenAstronomy/github-actions-workflows/.github/workflows/tox.yml@v3
     with:
       display: true
       libraries: |
