@@ -8,7 +8,7 @@ Also included are consistency tests for the flux calibration and single-dish sca
 the data in the uv-overlap range.
 
 Additional examples of the uvcombine functionality can be found in the
-`examples <https://github.com/uvcombine/uvcombine/tree/master/examples>`_ directory.
+`examples <https://github.com/radio-astro-tools/uvcombine/tree/main/examples>`_ directory.
 
 Getting started
 ^^^^^^^^^^^^^^^
@@ -19,6 +19,7 @@ Getting started
    install.rst
    feathering_images.rst
    feathering_cubes.rst
+   diagnostics.rst
    api.rst
 
 radio-astro-tools

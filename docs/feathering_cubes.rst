@@ -74,10 +74,9 @@ If the cubes already have matching chunk size, you can avoid rechunking the cube
 Previous functionality
 ----------------------
 
-A similar function `~uvcombine.fourier_combine_cubes` was previously implemented
-in uvcombine. Its use is now depcrecated as it lacks new features implemented in
-`~uvcombine.feather_simple_cube`. This method is appropriate for two cubes that each
-have a single beam size (i.e., the beam does not change between spectral channels).
-The low resolution beam size is also set using `lowresfwhm`, and is NOT read from
-the FITS header.
+Earlier versions of uvcombine provided a separate ``fourier_combine_cubes``
+function for feathering two cubes. It has been removed; use
+`~uvcombine.feather_simple_cube` instead, which covers the same use case
+(cubes with a single beam that does not change between channels) plus
+varying-resolution and dask-based cubes.
 
