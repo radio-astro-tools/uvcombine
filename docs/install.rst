@@ -15,6 +15,19 @@ This package has the following dependencies:
 *  radio-beam 0.3.5 or later
 *  tqdm
 
+Optional dependencies
+---------------------
+
+* `statsmodels <https://www.statsmodels.org>`_: provides a standard error
+  estimate for the scale factor from
+  ``uvcombine.scale_factor.find_scale_factor`` with ``method='distrib'``.
+  Without statsmodels, the scale factor is still fit but its standard
+  error is returned as 0.
+
+To install uvcombine with the optional dependencies::
+
+    pip install "uvcombine[stats]"
+
 Installation
 ------------
 

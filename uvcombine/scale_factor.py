@@ -124,8 +124,9 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
         Enables plotting of the data and the scale factor relation.
     use_likelihood_fit : bool, optional
         When using `method='distrib'`, fit the distribution with a maximum likelihood method.
-        This requires the statsmodels package to be installed. The main reason for this fitting
-        method is to provide standard error estimates on the fit parameters.
+        This requires the optional statsmodels package (``pip install "uvcombine[stats]"``).
+        The main reason for this fitting method is to provide standard error estimates on the
+        fit parameters. Without statsmodels, the standard error is returned as 0.
     method_kwargs : Passed to `~scipy.stats.theilslopes` for 'linfit' and
         `~astropy.stats.sigma_clipped_stats` for 'clippedstats'. Not used by
         'distrib'.
@@ -134,6 +135,9 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
     -------
     sc_factor : float
         The scale factor returned by 'distrib' and 'linfit'.
+    sc_factor_stderr : float
+        The standard error on the scale factor using 'distrib'. This is 0
+        unless ``use_likelihood_fit=True`` and statsmodels is installed.
     sc_confint : list
         The confidence interval for the scale factor using 'linfit'.
     out_dict : dict
@@ -176,7 +180,8 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
 
             except ImportError:
                 log.info("Unable to import statsmodels needed for the likelihood fit."
-                         " Parameter error estimates cannot be calculated.")
+                         " Parameter error estimates cannot be calculated. Install it"
+                         " with: pip install 'uvcombine[stats]'")
                 stderr = np.zeros_like(params)
 
         else:
