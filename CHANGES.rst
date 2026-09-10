@@ -1,3 +1,7 @@
+1.1.0 (unreleased)
+------------------
+
+
 1.0.0 (2026-09-10)
 ------------------
 First release on PyPI. Requires Python 3.10+ and astropy 6.1+.
