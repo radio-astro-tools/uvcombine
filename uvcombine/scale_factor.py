@@ -159,7 +159,7 @@ def find_scale_factor(lowres_pts, highres_pts, method='distrib',
         # Fit a Cauchy distribution to the log of the ratios
         log_ratio = np.log(ratio)
 
-        params = stats.cauchy.fit(ratio)
+        params = stats.cauchy.fit(log_ratio)
 
         # Try to get standard errors from a Likelihood fit with statsmodels
         if use_likelihood_fit:

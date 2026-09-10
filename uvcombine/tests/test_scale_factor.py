@@ -27,6 +27,19 @@ def test_scale_factor_distrib(fake_overlap_samples):
     npt.assert_almost_equal(sf_stderr, 0.001, decimal=3)
 
 
+def test_scale_factor_distrib_no_likelihood(fake_overlap_samples):
+    # Same fit as without statsmodels installed; no standard error estimate.
+
+    lowres_pts, highres_pts = fake_overlap_samples
+
+    sf, sf_stderr = find_scale_factor(lowres_pts, highres_pts,
+                                      method='distrib',
+                                      use_likelihood_fit=False)
+
+    npt.assert_almost_equal(sf, 1.001, decimal=3)
+    assert sf_stderr == 0.
+
+
 def test_scale_factor_linfit(fake_overlap_samples):
 
     lowres_pts, highres_pts = fake_overlap_samples
