@@ -17,11 +17,11 @@ from uvcombine.utils import (generate_test_fits,
                              interferometrically_observe_image,
                              singledish_observe_image)
 from uvcombine import feather_simple
+from uvcombine.uvcombine import feather_kernel
+from uvcombine.pspec import pspec
 
 from spectral_cube import SpectralCube, Projection
 from radio_beam import Beam
-
-from turbustat.statistics import PowerSpectrum
 
 # Consistency with CASA
 import astropy.units as units
@@ -197,23 +197,40 @@ _ = plt.hist(diff_orig_casa[np.isfinite(diff_orig_casa)])
 plt.title("Orig - CASA feather")
 
 
+def radial_power_spectrum(proj, beam_correct=False):
+    '''
+    Azimuthally-averaged power spectrum of a 2D image. Returns the
+    spatial frequencies (1 / pixel) and the 1D power spectrum.
+    '''
+    data = np.nan_to_num(proj.value)
+    ps2D = np.abs(np.fft.fft2(data))**2
+    if beam_correct:
+        # Divide out the Fourier response of the (circular Gaussian) beam.
+        # This is only meaningful on scales larger than the beam.
+        kfft, _ = feather_kernel(*data.shape, proj.beam.major, pixel_scale)
+        ps2D = ps2D / kfft**2
+    freqs, ps1D = pspec(np.fft.fftshift(ps2D))
+    # Drop empty bins so the lines are continuous
+    finite = np.isfinite(ps1D)
+    return freqs[finite], ps1D[finite]
+
+
 plt.figure()
 
-orig_pspec = PowerSpectrum(input_proj).run(verbose=False, fit_2D=False)
-casafeather_pspec = PowerSpectrum(casa_feather_proj).run(verbose=False, fit_2D=False)
-uvcombfeather_pspec = PowerSpectrum(uvcomb_feather_proj).run(verbose=False, fit_2D=False)
+orig_pspec = radial_power_spectrum(input_proj)
+casafeather_pspec = radial_power_spectrum(casa_feather_proj)
+uvcombfeather_pspec = radial_power_spectrum(uvcomb_feather_proj)
 
-sd_pspec = PowerSpectrum(sd_proj).run(verbose=False, fit_2D=False)
-sd_pspec_beamcorr = PowerSpectrum(sd_proj).run(verbose=False, fit_2D=False, beam_correct=True)
-intf_pspec = PowerSpectrum(intf_proj).run(verbose=False, fit_2D=False)
+sd_pspec = radial_power_spectrum(sd_proj)
+sd_pspec_beamcorr = radial_power_spectrum(sd_proj, beam_correct=True)
+intf_pspec = radial_power_spectrum(intf_proj)
 
-plt.loglog(orig_pspec.freqs.value, orig_pspec.ps1D, label='Original')
-plt.loglog(casafeather_pspec.freqs.value, casafeather_pspec.ps1D, label='CASA feath')
-plt.loglog(uvcombfeather_pspec.freqs.value, uvcombfeather_pspec.ps1D, label='uvcomb feath')
+plt.loglog(*orig_pspec, label='Original')
+plt.loglog(*casafeather_pspec, label='CASA feath')
+plt.loglog(*uvcombfeather_pspec, label='uvcomb feath')
 
-plt.loglog(sd_pspec.freqs.value, sd_pspec.ps1D, ":", label='SD')
-plt.loglog(sd_pspec_beamcorr.freqs.value, sd_pspec_beamcorr.ps1D, ":",
-           label='SD Beam corr', linewidth=2)
-plt.loglog(intf_pspec.freqs.value, intf_pspec.ps1D, "--", label='Intf')
+plt.loglog(*sd_pspec, ":", label='SD')
+plt.loglog(*sd_pspec_beamcorr, ":", label='SD Beam corr', linewidth=2)
+plt.loglog(*intf_pspec, "--", label='Intf')
 
 plt.legend()

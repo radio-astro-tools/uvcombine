@@ -1,5 +1,6 @@
 import numpy as np
 from .uvcombine import fftmerge, feather_kernel
+from .pspec import pspec
 
 def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
                                       suffix="", replacement_threshold=0.5,
@@ -9,7 +10,6 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
     Create diagnostic plots for different simulated feathers
     """
 
-    from turbustat.statistics import psds
     import pylab as pl
 
     feathers = {}
@@ -46,7 +46,7 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
                 resid = im-combo
 
 
-                pfreq, ppow = psds.pspec(np.fft.fftshift(np.abs(fftsum)))
+                pfreq, ppow = pspec(np.fft.fftshift(np.abs(fftsum)))
                 name = (("Replace < {}; ".format(replace_hires) if replace_hires else "") +
                         ("filterSD;" if lowpassfilterSD else "")+
                         ("deconvSD" if deconvSD else ""))
@@ -55,7 +55,7 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
                 pfreq = pfreq[np.isfinite(ppow)]
                 ppow = ppow[np.isfinite(ppow)]
 
-                pfreq_resid, ppow_resid = psds.pspec(np.fft.fftshift(np.abs(np.fft.fft2(resid))))
+                pfreq_resid, ppow_resid = pspec(np.fft.fftshift(np.abs(np.fft.fft2(resid))))
                 pfreq_resid = pfreq_resid[np.isfinite(ppow_resid)]
                 ppow_resid = ppow_resid[np.isfinite(ppow_resid)]
 
@@ -82,7 +82,7 @@ def compare_parameters_feather_simple(im, im_hi, im_low, lowresfwhm, pixscale,
 
 
     ax1 = fig1.add_subplot(3, 3, plotnum)
-    pfreq, ppow = psds.pspec(np.fft.fftshift(np.abs(np.fft.fft2(im))))
+    pfreq, ppow = pspec(np.fft.fftshift(np.abs(np.fft.fft2(im))))
     pfreq = pfreq[np.isfinite(ppow)]
     ppow = ppow[np.isfinite(ppow)]
     ax1.loglog(pfreq, ppow, linestyle='-', linewidth=4, color='g', alpha=1)

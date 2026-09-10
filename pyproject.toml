@@ -52,8 +52,11 @@ notebooks = [
     "pre-commit",
     "nbstripout",
 ]
+stats = [
+  "statsmodels",
+]
 all = [
-  "uvcombine[test,docs]",
+  "uvcombine[test,docs,stats]",
 ]
 
 [project.urls]
