@@ -3,7 +3,7 @@ name = "uvcombine"
 dynamic = [
     "version"
 ]
-description = "Combination of high- and low-resoluation radio astronomical data."
+description = "Combination of high- and low-resolution radio astronomical data."
 readme = "README.rst"
 authors = [
   { name = "Eric Koch", email = "koch.eric.w@gmail.com" },
@@ -12,6 +12,7 @@ authors = [
 license = "BSD-3-Clause"
 requires-python = ">=3.10"
 classifiers = [
+  "Development Status :: 5 - Production/Stable",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",

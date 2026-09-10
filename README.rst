@@ -9,8 +9,14 @@ with low-resolution images containing the short/zero spacing, including:
 * uv-overlap consistency tests and measuring the single dish flux scaling factor.
 
 See the `documentation <https://uvcombine.readthedocs.io/en/latest/>`_ for more information.
+Worked notebook examples of the uvcombine functionality can be found in the `examples <https://github.com/radio-astro-tools/uvcombine/tree/main/examples>`_ directory.
 
-## Development
+Install the latest release from PyPI with::
+
+    pip install uvcombine
+
+Development
+^^^^^^^^^^^
 
 Example notebooks under ``examples/`` are kept free of cell outputs on ``main`` so
 diffs stay reviewable. This is enforced by a ``pre-commit`` hook (`nbstripout
@@ -22,8 +28,6 @@ with outputs is pushed. To set up the hook locally::
 
 Notebooks with their outputs executed are kept on the ``with-output`` branch
 instead; it is refreshed manually (not by CI) whenever an example notebook changes.
-
-Worked notebook examples of the uvcombine functionality can be found in the `examples <https://github.com/uvcombine/uvcombine/tree/master/examples>`_ directory.
 
 radio-astro-tools
 ^^^^^^^^^^^^^^^^^
