@@ -1,6 +1,8 @@
 1.0.1 (unreleased)
 ------------------
-
+- Require numpy>=2.0, spectral-cube>=0.6.7 and radio-beam>=0.3.10 (#59)
+- Test on Python 3.11 (Linux) and 3.13 (macOS/Windows); test CASA on
+  Python 3.12 and 3.13 (#59)
 
 1.0.0 (2026-09-10)
 ------------------
