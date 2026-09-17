@@ -23,14 +23,19 @@ jobs:
         - linux: build_docs
         - linux: py310-test
         - linux: py310-test-casa
+        - linux: py311-test
+        - linux: py312-test-casa
+        - linux: py313-test-casa
         - linux: py312-test-dev
         - linux: py313-test-all
         - macos: py310-test-all
         - macos: py311-test-all
         - macos: py312-test-all
+        - macos: py313-test-all
         - macos: py313-test-dev
         - windows: py310-test-all
         - windows: py311-test-all
         - windows: py312-test-all
+        - windows: py313-test-all
         - windows: py313-test-dev
 

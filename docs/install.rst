@@ -7,12 +7,12 @@ Requirements
 This package has the following dependencies:
 
 * `Python <http://www.python.org>`_ 3.10 or later
-* `Numpy <http://www.numpy.org>`_ 1.8 or later
+* `Numpy <http://www.numpy.org>`_ 2.0 or later
 * `Astropy <http://www.astropy.org>`__ 6.1 or later
 *  matplotlib 3.5 or later
 *  reproject 0.13 or later
-*  spectral-cube 0.4.0 or later
-*  radio-beam 0.3.5 or later
+*  spectral-cube 0.6.7 or later
+*  radio-beam 0.3.10 or later
 *  tqdm
 
 Optional dependencies
